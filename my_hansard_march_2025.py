@@ -94,7 +94,7 @@ with st.sidebar:
         st.success("Re-indexed! (All embeddings reloaded)")
 
 prompt = st.text_area("What do you want to know?")
-if st.button("Ask (Text)", type="primary"):
+if st.button("Ask Arvee", type="primary"):
     if not prompt.strip():
         st.warning("You need to type a question!")
     else:
