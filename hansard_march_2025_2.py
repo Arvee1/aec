@@ -6,8 +6,8 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 # --- Settings ---
 CHROMA_DATA_PATH = "chroma_data/"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-COLLECTION_NAME = "ofsc_docs"
-DOC_FILE = "ofsc2.txt"
+COLLECTION_NAME = "hansard_docs"
+DOC_FILE = "hansard_march_2025.txt"
 
 # --- Vector DB and Embedding Setup ---
 @st.cache_resource
@@ -45,11 +45,11 @@ num_chunks = process_file_and_store(DOC_FILE)
 collection = get_chroma_collection()
 
 # --- UI ---
-st.title("📄 OFSC Vector Search QA")
+st.title("📄 Hansard Vector Search QA")
 
 st.markdown(f"Loaded `{DOC_FILE}` into database as {num_chunks} chunks.")
 
-prompt = st.text_area("Ask anything about the OFSC and Application process:")
+prompt = st.text_area("Ask anything about the Hansard:")
 
 if st.button("Query the Vector Database"):
     if not prompt.strip():
