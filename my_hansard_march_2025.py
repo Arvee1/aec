@@ -87,11 +87,11 @@ populate_vectordb_if_empty(collection, hansard_chunks)
 
 # --- APP UI ---
 st.title("📊 WAZZUP!!! What happened at Finance Estimates (March 2025)")
-with st.sidebar:
-    if st.button("Re-index Document into VectorDB"):
-        with st.spinner("Re-indexing..."):
-            reindex_vectordb(collection, hansard_chunks)
-        st.success("Re-indexed! (All embeddings reloaded)")
+# with st.sidebar:
+#     if st.button("Re-index Document into VectorDB"):
+#         with st.spinner("Re-indexing..."):
+#             reindex_vectordb(collection, hansard_chunks)
+#         st.success("Re-indexed! (All embeddings reloaded)")
 
 prompt = st.text_area("What do you want to know?")
 if st.button("Ask Arvee", type="primary"):
