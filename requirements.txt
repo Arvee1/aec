@@ -1,3 +1,4 @@
+
 streamlit
 protobuf~=3.19.0
 langchain
@@ -8,3 +9,5 @@ ollama
 openai
 SpeechRecognition
 replicate
+pyaudio
+streamlit-audiorecorder
