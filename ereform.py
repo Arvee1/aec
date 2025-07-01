@@ -104,7 +104,7 @@ if st.button("Ask Arvee", type="primary"):
                 st.markdown("**Top retrieved context:**")
                 for d in docs[:3]: st.info(d)
                 result = ask_llama(prompt, '\n---\n'.join(docs[:3]))
-                st.subheader("AI says:")
+                st.subheader("Arvee says:")
                 st.write(result)
             else:
                 st.info("No relevant context found.")
@@ -141,7 +141,7 @@ if len(audio) > 0:
             st.markdown("**Top retrieved context:**")
             for d in docs[:3]: st.info(d)
             result = ask_llama(spoken_prompt, '\n---\n'.join(docs[:3]))
-            st.subheader("AI says:")
+            st.subheader("Arvee says:")
             st.write(result)
         else:
             st.info("No relevant context found.")
