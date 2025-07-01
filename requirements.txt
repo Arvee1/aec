@@ -10,3 +10,4 @@ SpeechRecognition
 replicate
 pyaudio
 streamlit-audiorecorder
+ 
