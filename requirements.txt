@@ -9,3 +9,7 @@ langchain-openai
 IPython
 crewai
 crewai-tools>=0.1.52
+SpeechRecognition
+replicate
+pyaudio
+streamlit-audiorecorder
