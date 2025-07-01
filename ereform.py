@@ -1,4 +1,4 @@
-import streamlit as st
+mimport streamlit as st
 import sys
 
 # sqlite3 workaround
@@ -14,8 +14,8 @@ from audiorecorder import audiorecorder
 # --- CONFIGURATION ---
 CHROMA_DATA_PATH = "chroma_data/"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-COLLECTION_NAME = "hansard_docs"
-DOC_FILE = "Finance_2025_03_27.txt"
+COLLECTION_NAME = "ereform_docs"
+DOC_FILE = "24146b01_Electoral_Reform.txt"
 
 # --- SETUP EMBEDDING AND VECTOR DB ---
 @st.cache_resource
@@ -86,7 +86,7 @@ hansard_chunks = chunk_document(DOC_FILE)
 populate_vectordb_if_empty(collection, hansard_chunks)
 
 # --- APP UI ---
-st.title("📊 WAZZUP!!! What happened at Finance Estimates (March 2025)")
+st.title("📊 WAZZUP!!! Ask me anything about reforms")
 # with st.sidebar:
 #     if st.button("Re-index Document into VectorDB"):
 #         with st.spinner("Re-indexing..."):
@@ -96,7 +96,7 @@ st.title("📊 WAZZUP!!! What happened at Finance Estimates (March 2025)")
 prompt = st.text_area("What do you want to know?")
 if st.button("Ask Arvee", type="primary"):
     if not prompt.strip():
-        st.warning("You need to type a question!")
+        st.warning("You need to type a question! I can't read your mind...yet :)")
     else:
         with st.spinner("Retrieving info and asking the AI..."):
             docs = query_vectordb(collection, prompt, n_results=10)
