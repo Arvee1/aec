@@ -8,6 +8,3 @@ ollama
 openai
 SpeechRecognition
 replicate
-pyaudio
-streamlit-audiorecorder
- 
