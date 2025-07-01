@@ -109,39 +109,3 @@ if st.button("Ask Arvee", type="primary"):
             else:
                 st.info("No relevant context found.")
 
-# --- AUDIO QUERY ---
-st.markdown("---")
-st.markdown("### 🎤 Or record your question:")
-
-audio = audiorecorder("Click to record", "Click to stop recording")
-if len(audio) > 0:
-    st.audio(audio.export().read())  
-    audio.export("audio.wav", format="wav")
-
-    # Transcribe
-    with st.spinner("Transcribing..."):
-        with open("audio.wav", "rb") as soundfile:
-            text = replicate.run(
-                "vaibhavs10/incredibly-fast-whisper:3ab86df6c8f54c11309d4d1f930ac292bad43ace52d10c80d87eb258b3c9f79c",
-                input={
-                    "task": "transcribe",
-                    "audio": soundfile,
-                    "language": "None",
-                    "timestamp": "chunk",
-                    "batch_size": 64,
-                    "diarise_audio": False
-                }
-            )
-        spoken_prompt = text['text']
-        st.write(f"You said: {spoken_prompt}")
-
-    with st.spinner("Retrieving info and asking the AI..."):
-        docs = query_vectordb(collection, spoken_prompt, n_results=10)
-        if docs:
-            st.markdown("**Top retrieved context:**")
-            for d in docs[:3]: st.info(d)
-            result = ask_llama(spoken_prompt, '\n---\n'.join(docs[:3]))
-            st.subheader("Arvee says:")
-            st.write(result)
-        else:
-            st.info("No relevant context found.")
