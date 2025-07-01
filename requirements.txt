@@ -1,0 +1,12 @@
+streamlit
+protobuf~=3.19.0
+langchain
+pysqlite3-binary
+sentence_transformers
+chromadb
+ollama
+openai
+SpeechRecognition
+replicate
+pyaudio
+streamlit-audiorecorder
