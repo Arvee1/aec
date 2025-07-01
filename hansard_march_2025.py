@@ -20,7 +20,7 @@ r.pause_threshold = 2
 
 CHROMA_DATA_PATH = "chroma_data/"
 EMBED_MODEL = "all-MiniLM-L6-v2"
-COLLECTION_NAME = "ofsc_docs"
+COLLECTION_NAME = "hansard_docs"
 
 client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
 embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
@@ -37,7 +37,7 @@ collection = client.get_or_create_collection(
 # if st.sidebar.button("Load OFSC Facsheets into Vector DB if loading the page for the first time.", type="primary"):
 @st.cache_resource
 def create_vector():
-      with open("ofsc2.txt") as f:
+      with open("Finance_2025_03_27.txt") as f:
           hansard = f.read()
           text_splitter = RecursiveCharacterTextSplitter(
               chunk_size=500,
@@ -58,13 +58,13 @@ def create_vector():
 create_vector()
 
 # The UI Part
-st.title("👨‍💻 Wazzup!!!! What do you want to know about the OFSC?")
+st.title("👨‍💻 Wazzup!!!! What do you want to know about the Finance Estimates March 2025?")
 # apikey = st.sidebar.text_area("Please enter enter your API Key.")
-prompt = st.text_area("Please enter what you want to know about the OFSC and Application process.")
+prompt = st.text_area("Please enter what you want to know about what happened.")
 
 # Load VectorDB
 if st.sidebar.button("Load OFSC Facsheets into Vector DB if loading the page for the first time.", type="primary"):
-      with open("ofsc2.txt") as f:
+      with open("Finance_2025_03_27.txt") as f:
           hansard = f.read()
           text_splitter = RecursiveCharacterTextSplitter(
               chunk_size=500,
