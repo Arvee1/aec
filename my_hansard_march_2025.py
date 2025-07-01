@@ -86,7 +86,7 @@ hansard_chunks = chunk_document(DOC_FILE)
 populate_vectordb_if_empty(collection, hansard_chunks)
 
 # --- APP UI ---
-st.title("📊 Discover Finance Estimates (March 2025)")
+st.title("📊 WAZZUP!!! What happened at Finance Estimates (March 2025)")
 with st.sidebar:
     if st.button("Re-index Document into VectorDB"):
         with st.spinner("Re-indexing..."):
