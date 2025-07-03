@@ -2,9 +2,9 @@ import streamlit as st
 import openai
 
 # --- Set your OpenAI key here or via OS environment variable ---
-openai.api_key = "YOUR_OPENAI_API_KEY"
+openai.api_key = st.secrets["api_key"]
 
-st.set_page_config(page_title="IT Requirements Extractor", layout="wide")
+st.set_page_config(page_title="Wazzup. I am your Business Analyst", layout="wide")
 
 st.title("High-Level IT Requirements Extractor")
 
@@ -23,7 +23,7 @@ if uploaded_file:
     st.header("Original Content")
     st.write(content)
     
-    if st.button("Generate IT Requirements"):
+    if st.button("BA Arvee go to work!"):
         # Formulate prompt for LLM
         prompt = f"""
         Read the following project description/text. 
@@ -42,7 +42,7 @@ if uploaded_file:
 
         with st.spinner("Extracting requirements..."):
             response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo", 
+                model="gpt-4o", 
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.3,
