@@ -23,7 +23,7 @@ if uploaded_file:
     st.header("Original Content")
     st.write(content)
     
-    if st.button("BA Arvee go to work!"):
+    if st.button("Generate IT Requirements"):
         # Formulate prompt for LLM
         prompt = f"""
         Read the following project description/text. 
@@ -41,13 +41,13 @@ if uploaded_file:
         """
 
         with st.spinner("Extracting requirements..."):
-            response = openai.ChatCompletion.create(
-                model="gpt-4o", 
+            response = openai.chat.completions.create(
+                model="gpt-3.5-turbo", 
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=500,
                 temperature=0.3,
             )
-            requirements = response['choices'][0]['message']['content']
+            requirements = response.choices[0].message.content
 
         st.subheader("Extracted High-Level IT Requirements")
         st.write(requirements)
