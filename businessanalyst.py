@@ -6,7 +6,7 @@ openai.api_key = st.secrets["api_key"]
 
 st.set_page_config(page_title="Wazzup. I am your Business Analyst", layout="wide")
 
-st.title("High-Level IT Requirements Extractor")
+st.title("Wazzup. I am your Business Analyst")
 
 st.write("""
 Upload a text file (project brief, business requirement, etc).
