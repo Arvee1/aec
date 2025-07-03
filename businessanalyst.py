@@ -5,7 +5,7 @@ openai.api_key = st.secrets["api_key"]
 
 st.set_page_config(page_title="IT Requirements Extractor", layout="wide")
 
-st.title("High-Level IT Requirements Extractor")
+st.title("Wazzup!!! It is BA Arvee ready to go!")
 
 st.write("""
 Upload a text file (project brief, business requirement, etc).
