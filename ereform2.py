@@ -1,5 +1,6 @@
 import streamlit as st
 import sys
+import json
 
 # sqlite3 workaround
 __import__('pysqlite3')
@@ -81,16 +82,16 @@ def ask_llama(prompt, context):
         result_ai += str(event)
     return result_ai
 
-    def get_user_feedback(question):
-        import json
-        if not os.path.exists(FEEDBACK_FILE):
-            return None
-        with open(FEEDBACK_FILE, "r") as f:
-            for line in f:
-                data = json.loads(line)
-                if data["prompt"].strip().lower() == question.strip().lower():
-                    return data
+def get_user_feedback(question):
+    import json
+    if not os.path.exists(FEEDBACK_FILE):
         return None
+    with open(FEEDBACK_FILE, "r") as f:
+        for line in f:
+            data = json.loads(line)
+            if data["prompt"].strip().lower() == question.strip().lower():
+                return data
+    return None
 
 # --- INITIALIZE (ONLY ONCE, FAST ON RELOADS) ---
 collection = get_chroma_collection()
