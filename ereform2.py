@@ -1,6 +1,7 @@
 import streamlit as st
 import sys
 import json
+import os
 
 # sqlite3 workaround
 __import__('pysqlite3')
