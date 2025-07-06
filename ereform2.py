@@ -112,6 +112,8 @@ if st.button("Ask Arvee", type="primary"):
         st.warning("You need to type a question! I can't read your mind...yet :)")
     else:
         with st.spinner("Retrieving info and asking the AI..."):
+            # Make sure feedback_data is defined at the top of this block!
+            feedback_data = get_user_feedback(prompt)
             docs = query_vectordb(collection, prompt, n_results=10)
             if docs:
                 st.markdown("**Top retrieved context:**")
