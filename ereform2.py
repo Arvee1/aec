@@ -94,6 +94,33 @@ def get_user_feedback(question):
                 return data
     return None
 
+def load_all_feedback():
+    if not os.path.exists(FEEDBACK_FILE):
+        return []
+    with open(FEEDBACK_FILE, "r") as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+with st.sidebar:
+    st.header("📝 User Feedback History")
+    feedback_entries = load_all_feedback()
+    if feedback_entries:
+        # Show the last N entries (change N as desired)
+        N = min(len(feedback_entries), 10)
+        for entry in reversed(feedback_entries[-N:]):
+            st.markdown("---")
+            st.markdown(f"**Prompt:** {entry['prompt']}")
+            st.markdown(f"**Rating:** {entry['user_feedback']}")
+            if entry['user_correction']:
+                st.markdown(f"**Correction:** {entry['user_correction']}")
+            # Optional: Show part of AI answer
+            # st.markdown(f"<span style='font-size:small;'>{entry['ai_answer'][:100]}</span>",
+            #             unsafe_allow_html=True)
+
+        if len(feedback_entries) > N:
+            st.info(f"Showing last {N} of {len(feedback_entries)} feedback entries.")
+    else:
+        st.info("No feedback submitted yet!")
+
 # --- INITIALIZE (ONLY ONCE, FAST ON RELOADS) ---
 collection = get_chroma_collection()
 hansard_chunks = chunk_document(DOC_FILE)
