@@ -16,6 +16,7 @@ CHROMA_DATA_PATH = "chroma_data/"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "ereform_docs"
 DOC_FILE = "24146b01_Electoral_Reform.txt"
+FEEDBACK_FILE = "user_feedback.jsonl"
 
 # --- SETUP EMBEDDING AND VECTOR DB ---
 @st.cache_resource
@@ -80,6 +81,17 @@ def ask_llama(prompt, context):
         result_ai += str(event)
     return result_ai
 
+    def get_user_feedback(question):
+        import json
+        if not os.path.exists(FEEDBACK_FILE):
+            return None
+        with open(FEEDBACK_FILE, "r") as f:
+            for line in f:
+                data = json.loads(line)
+                if data["prompt"].strip().lower() == question.strip().lower():
+                    return data
+        return None
+
 # --- INITIALIZE (ONLY ONCE, FAST ON RELOADS) ---
 collection = get_chroma_collection()
 hansard_chunks = chunk_document(DOC_FILE)
@@ -103,8 +115,44 @@ if st.button("Ask Arvee", type="primary"):
             if docs:
                 st.markdown("**Top retrieved context:**")
                 for d in docs[:3]: st.info(d)
-                result = ask_llama(prompt, '\n---\n'.join(docs[:3]))
+
+                # Use user correction if available and marked as such
+                user_context = ""
+                if feedback_data and feedback_data["user_feedback"] in ["Bad", "Can be improved"] and feedback_data["user_correction"]:
+                    user_context = f"Note: A user suggested this correction:\n{feedback_data['user_correction']}"
+
+                # Compose context with possible user-contributed corrections
+                final_context = '\n---\n'.join(docs[:3])
+                if user_context:
+                    final_context = final_context + "\n" + user_context
+
+                result = ask_llama(prompt, final_context)
                 st.subheader("Arvee says:")
                 st.write(result)
+                
+                # result = ask_llama(prompt, '\n---\n'.join(docs[:3]))
+                # st.subheader("Arvee says:")
+                # st.write(result)
+                
+                # --- Feedback UI ---
+                st.markdown("### Was this answer helpful?")
+                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
+                user_correction = ""
+                if fb in ["Bad", "Can be improved"]:
+                    user_correction = st.text_area("What would have been a better answer? (optional)")
+                
+                if st.button("Submit Feedback"):
+                    # Store feedback to file
+                    import json
+                    feedback = {
+                        "prompt": prompt,
+                        "context": docs[:3],
+                        "ai_answer": result,
+                        "user_feedback": fb,
+                        "user_correction": user_correction
+                    }
+                    with open(FEEDBACK_FILE, "a") as f:
+                        f.write(json.dumps(feedback) + "\n")
+                    st.success("Feedback received - thank you!")            
             else:
                 st.info("No relevant context found.")
