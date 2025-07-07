@@ -167,45 +167,28 @@ if st.button("Ask Arvee", type="primary"):
                 
                 # --- Feedback UI ---
                 st.markdown("### Was this answer helpful?")
-
-                with st.form("feedback_form"):
-                    rating = st.radio("Rating:", ["Good", "Bad", "Can be improved"], key="fb_radio")
-                    show_correction = (rating in ["Bad", "Can be improved"])
-                    correction = st.text_area(
-                        "Correction (required if rating is Bad/Can be improved)",
-                        disabled=not show_correction,
-                        key="correction_textarea"
-                    )
-                    submitted = st.form_submit_button("Submit Feedback")
-                    if submitted:
-                        if show_correction and (not correction.strip()):
-                            st.error("Correction is required for this rating.")
-                        else:
-                            feedback = {
-                                "prompt": "Your prompt here",
-                                "user_feedback": rating,
-                                "user_correction": correction
-                            }
-                            # append_feedback(feedback)
-                            st.success("Feedback saved!")
-                                
-                # fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
-                # user_correction = ""
-                # if fb in ["Bad", "Can be improved"]:
-                #     user_correction = st.text_area("What would have been a better answer? (optional)")
-                
-                # if st.button("Submit Feedback"):
-                    # Store feedback to file
-                #     import json
-                 #    feedback = {
-                 #        "prompt": prompt,
-                  #       "context": docs[:3],
-                  #       "ai_answer": result,
-                  #       "user_feedback": fb,
-                 #        "user_correction": user_correction
-                 #    }
-                 #    with open(FEEDBACK_FILE, "a") as f:
-                 #        f.write(json.dumps(feedback) + "\n")
-                 #    st.success("Feedback received - thank you!")            
+                st.markdown("---")
+                st.markdown("## Was this answer helpful?")
+                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"])
+                show_correction = (fb in ["Bad", "Can be improved"])
+                correction = ""
+                if show_correction:
+                    correction = st.text_area("What would have been a better answer? (optional)")
+                if st.button("Submit Feedback"):
+                    if show_correction and not correction.strip():
+                        st.error("Correction is required for this rating.")
+                    else:
+                        feedback = {
+                            "prompt": prompt,
+                            "context": docs[:3],
+                            "ai_answer": result,
+                            "user_feedback": fb,
+                            "user_correction": correction
+                        }
+                        # Save feedback to file
+                        import json
+                        with open(FEEDBACK_FILE, "a") as f:
+                            f.write(json.dumps(feedback) + "\n")
+                        st.success("Feedback received - thank you!")         
             else:
                 st.info("No relevant context found.")
