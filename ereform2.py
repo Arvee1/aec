@@ -121,14 +121,6 @@ with st.sidebar:
     else:
         st.info("No feedback submitted yet!")
 
-    # Display contents of feedback file
-    if os.path.exists(FEEDBACK_FILE):
-        with open(FEEDBACK_FILE, "r") as f:
-            st.header("Current Feedback File:")
-            st.code(f.read())
-    else:
-        st.info("No feedback file found yet.")
-
 # --- INITIALIZE (ONLY ONCE, FAST ON RELOADS) ---
 collection = get_chroma_collection()
 hansard_chunks = chunk_document(DOC_FILE)
@@ -176,24 +168,26 @@ if st.button("Ask Arvee", type="primary"):
                 # --- Feedback UI ---
                 st.markdown("### Was this answer helpful?")
 
-                with st.form(key="feedback_form"):
-                    fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="fb_radio")
-                    user_correction = ""
-                    if fb in ["Bad", "Can be improved"]:
-                        user_correction = st.text_area("What would have been a better answer? (optional)", key="correction_textarea")
-                    submitted = st.form_submit_button(label="Submit Feedback")
+                with st.form("feedback_form"):
+                    rating = st.radio("Rating:", ["Good", "Bad", "Can be improved"], key="fb_radio")
+                    show_correction = (rating in ["Bad", "Can be improved"])
+                    correction = st.text_area(
+                        "Correction (required if rating is Bad/Can be improved)",
+                        disabled=not show_correction,
+                        key="correction_textarea"
+                    )
+                    submitted = st.form_submit_button("Submit Feedback")
                     if submitted:
-                        feedback = {
-                            "prompt": prompt,
-                            "context": docs[:3],
-                            "ai_answer": result,
-                            "user_feedback": fb,
-                            "user_correction": user_correction
-                        }
-                        with open(FEEDBACK_FILE, "a") as f:
-                            import json
-                            f.write(json.dumps(feedback) + "\n")
-                        st.success("Feedback received - thank you!")
+                        if show_correction and (not correction.strip()):
+                            st.error("Correction is required for this rating.")
+                        else:
+                            feedback = {
+                                "prompt": "Your prompt here",
+                                "user_feedback": rating,
+                                "user_correction": correction
+                            }
+                            # append_feedback(feedback)
+                            st.success("Feedback saved!")
                                 
                 # fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
                 # user_correction = ""
