@@ -150,15 +150,19 @@ if st.button("Ask Arvee", type="primary"):
                 st.subheader("Arvee says:")
                 st.write(result)
 
-                # Place Option 1 FEEDBACK UI here!
                 st.markdown("---")
                 st.markdown("## Was this answer helpful?")
-                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"])
+                # These widgets will re-render on every interaction, but **that's normal**
+                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
                 show_correction = (fb in ["Bad", "Can be improved"])
                 correction = ""
                 if show_correction:
-                    correction = st.text_area("What would have been a better answer? (optional)")
-                if st.button("Submit Feedback"):
+                    correction = st.text_area(
+                        "What would have been a better answer? (optional)", key="correction_textarea"
+                    )
+                
+                # Only save on button click! This block is not triggered by radio/textarea – only the button.
+                if st.button("Submit Feedback", key="submit_feedback_btn"):
                     if show_correction and not correction.strip():
                         st.error("Correction is required for this rating.")
                     else:
@@ -169,11 +173,7 @@ if st.button("Ask Arvee", type="primary"):
                             "user_feedback": fb,
                             "user_correction": correction
                         }
-                        # Save feedback to file
                         import json
                         with open(FEEDBACK_FILE, "a") as f:
                             f.write(json.dumps(feedback) + "\n")
                         st.success("Feedback received - thank you!")
-
-            else:
-                st.info("No relevant context found.")
