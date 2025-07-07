@@ -150,28 +150,19 @@ if st.button("Ask Arvee", type="primary"):
                 st.subheader("Arvee says:")
                 st.write(result)
 
+                # --- Usage: Place this right after your result display ---
                 st.markdown("---")
-                st.markdown("## Was this answer helpful?")
-                # These widgets will re-render on every interaction, but **that's normal**
-                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
-                correction = ""
-                correction = st.text_area(
-                    "What would have been a better answer? (optional)", key="correction_textarea"
-                )
-                
-                # Only save on button click! This block is not triggered by radio/textarea – only the button.
-                if st.button("Submit Feedback", key="submit_feedback_btn"):
-                    if show_correction and not correction.strip():
-                        st.error("Correction is required for this rating.")
+                st.markdown("## Submit Your Feedback")
+                feedback_text = st.text_area("Your comments, corrections or suggestions:")
+                if st.button("Submit Feedback"):
+                    if not feedback_text.strip():
+                        st.error("Feedback cannot be empty.")
                     else:
                         feedback = {
-                            "prompt": prompt,
-                            "context": docs[:3],
+                            "prompt": prompt,            # Use actual values from your UI/logic
+                            "context": docs[:3],         # Use your relevant context
                             "ai_answer": result,
-                            "user_feedback": fb,
-                            "user_correction": correction
+                            "user_feedback": feedback_text,
                         }
-                        import json
-                        with open(FEEDBACK_FILE, "a") as f:
-                            f.write(json.dumps(feedback) + "\n")
-                        st.success("Feedback received - thank you!")
+                        append_feedback(feedback)
+                        st.success("Thank you for your feedback!")
