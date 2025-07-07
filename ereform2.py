@@ -167,23 +167,43 @@ if st.button("Ask Arvee", type="primary"):
                 
                 # --- Feedback UI ---
                 st.markdown("### Was this answer helpful?")
-                fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
-                user_correction = ""
-                if fb in ["Bad", "Can be improved"]:
-                    user_correction = st.text_area("What would have been a better answer? (optional)")
+
+                with st.form(key="feedback_form"):
+                    fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="fb_radio")
+                    user_correction = ""
+                    if fb in ["Bad", "Can be improved"]:
+                        user_correction = st.text_area("What would have been a better answer? (optional)", key="correction_textarea")
+                    submitted = st.form_submit_button(label="Submit Feedback")
+                    if submitted:
+                        feedback = {
+                            "prompt": prompt,
+                            "context": docs[:3],
+                            "ai_answer": result,
+                            "user_feedback": fb,
+                            "user_correction": user_correction
+                        }
+                        with open(FEEDBACK_FILE, "a") as f:
+                            import json
+                            f.write(json.dumps(feedback) + "\n")
+                        st.success("Feedback received - thank you!")
+                                
+                # fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
+                # user_correction = ""
+                # if fb in ["Bad", "Can be improved"]:
+                #     user_correction = st.text_area("What would have been a better answer? (optional)")
                 
-                if st.button("Submit Feedback"):
+                # if st.button("Submit Feedback"):
                     # Store feedback to file
-                    import json
-                    feedback = {
-                        "prompt": prompt,
-                        "context": docs[:3],
-                        "ai_answer": result,
-                        "user_feedback": fb,
-                        "user_correction": user_correction
-                    }
-                    with open(FEEDBACK_FILE, "a") as f:
-                        f.write(json.dumps(feedback) + "\n")
-                    st.success("Feedback received - thank you!")            
+                #     import json
+                 #    feedback = {
+                 #        "prompt": prompt,
+                  #       "context": docs[:3],
+                  #       "ai_answer": result,
+                  #       "user_feedback": fb,
+                 #        "user_correction": user_correction
+                 #    }
+                 #    with open(FEEDBACK_FILE, "a") as f:
+                 #        f.write(json.dumps(feedback) + "\n")
+                 #    st.success("Feedback received - thank you!")            
             else:
                 st.info("No relevant context found.")
