@@ -100,6 +100,10 @@ def load_all_feedback():
     with open(FEEDBACK_FILE, "r") as f:
         return [json.loads(line) for line in f if line.strip()]
 
+def append_feedback(feedback, feedback_file=FEEDBACK_FILE):
+    with open(feedback_file, "a") as f:
+        f.write(json.dumps(feedback) + "\n")
+
 with st.sidebar:
     st.header("📝 User Feedback History")
     feedback_entries = load_all_feedback()
@@ -150,19 +154,22 @@ if st.button("Ask Arvee", type="primary"):
                 st.subheader("Arvee says:")
                 st.write(result)
 
-                # --- Usage: Place this right after your result display ---
+                # ... inside your if docs: ... after displaying the answer ...
                 st.markdown("---")
                 st.markdown("## Submit Your Feedback")
-                feedback_text = st.text_area("Your comments, corrections or suggestions:")
-                if st.button("Submit Feedback"):
+                feedback_text = st.text_area("Your comments, corrections or suggestions:", key="feedback_text")
+                if st.button("Submit Feedback", key="submit_feedback_btn"):
                     if not feedback_text.strip():
                         st.error("Feedback cannot be empty.")
                     else:
                         feedback = {
-                            "prompt": prompt,            # Use actual values from your UI/logic
-                            "context": docs[:3],         # Use your relevant context
+                            "prompt": prompt,
+                            "context": docs[:3],
                             "ai_answer": result,
                             "user_feedback": feedback_text,
                         }
                         append_feedback(feedback)
                         st.success("Thank you for your feedback!")
+                        # For debug: Show file contents below (optional)
+                        with open(FEEDBACK_FILE, "r") as f:
+                            st.code(f.read())
