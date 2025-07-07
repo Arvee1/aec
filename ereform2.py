@@ -135,38 +135,22 @@ st.title("📊 WAZZUP!!! Ask me anything about reforms")
 #         st.success("Re-indexed! (All embeddings reloaded)")
 
 prompt = st.text_area("What do you want to know?")
+# ...previous code...
 if st.button("Ask Arvee", type="primary"):
     if not prompt.strip():
         st.warning("You need to type a question! I can't read your mind...yet :)")
     else:
         with st.spinner("Retrieving info and asking the AI..."):
-            # Make sure feedback_data is defined at the top of this block!
-            feedback_data = get_user_feedback(prompt)
             docs = query_vectordb(collection, prompt, n_results=10)
             if docs:
                 st.markdown("**Top retrieved context:**")
-                for d in docs[:3]: st.info(d)
-
-                # Use user correction if available and marked as such
-                user_context = ""
-                if feedback_data and feedback_data["user_feedback"] in ["Bad", "Can be improved"] and feedback_data["user_correction"]:
-                    user_context = f"Note: A user suggested this correction:\n{feedback_data['user_correction']}"
-
-                # Compose context with possible user-contributed corrections
-                final_context = '\n---\n'.join(docs[:3])
-                if user_context:
-                    final_context = final_context + "\n" + user_context
-
-                result = ask_llama(prompt, final_context)
+                for d in docs[:3]:
+                    st.info(d)
+                result = ask_llama(prompt, '\n---\n'.join(docs[:3]))
                 st.subheader("Arvee says:")
                 st.write(result)
-                
-                # result = ask_llama(prompt, '\n---\n'.join(docs[:3]))
-                # st.subheader("Arvee says:")
-                # st.write(result)
-                
-                # --- Feedback UI ---
-                st.markdown("### Was this answer helpful?")
+
+                # Place Option 1 FEEDBACK UI here!
                 st.markdown("---")
                 st.markdown("## Was this answer helpful?")
                 fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"])
@@ -189,6 +173,7 @@ if st.button("Ask Arvee", type="primary"):
                         import json
                         with open(FEEDBACK_FILE, "a") as f:
                             f.write(json.dumps(feedback) + "\n")
-                        st.success("Feedback received - thank you!")         
+                        st.success("Feedback received - thank you!")
+
             else:
                 st.info("No relevant context found.")
