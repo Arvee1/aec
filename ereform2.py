@@ -154,12 +154,10 @@ if st.button("Ask Arvee", type="primary"):
                 st.markdown("## Was this answer helpful?")
                 # These widgets will re-render on every interaction, but **that's normal**
                 fb = st.radio("Your rating:", ["Good", "Bad", "Can be improved"], key="feedback_radio")
-                show_correction = (fb in ["Bad", "Can be improved"])
                 correction = ""
-                if show_correction:
-                    correction = st.text_area(
-                        "What would have been a better answer? (optional)", key="correction_textarea"
-                    )
+                correction = st.text_area(
+                    "What would have been a better answer? (optional)", key="correction_textarea"
+                )
                 
                 # Only save on button click! This block is not triggered by radio/textarea – only the button.
                 if st.button("Submit Feedback", key="submit_feedback_btn"):
