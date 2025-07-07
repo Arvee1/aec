@@ -121,6 +121,14 @@ with st.sidebar:
     else:
         st.info("No feedback submitted yet!")
 
+    # Display contents of feedback file
+    if os.path.exists(FEEDBACK_FILE):
+        with open(FEEDBACK_FILE, "r") as f:
+            st.header("Current Feedback File:")
+            st.code(f.read())
+    else:
+        st.info("No feedback file found yet.")
+
 # --- INITIALIZE (ONLY ONCE, FAST ON RELOADS) ---
 collection = get_chroma_collection()
 hansard_chunks = chunk_document(DOC_FILE)
