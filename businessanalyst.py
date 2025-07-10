@@ -48,9 +48,11 @@ if uploaded_file:
                 st.write(f"Processing chunk {i+1}/{len(chunks)}")
                 prompt = f"""
                 Read the following text (part of a project description).
-                From it, identify high-level IT requirements for:
-                (A) External Users
-                (B) Internal Users
+                You are an expert in IT-enabled legislative transformation. Carefully review the following legislation:
+                Analyze the requirements, changes, and objectives. Based on your analysis, draft a cohesive target state 
+                concept document structured under the following headings and subheadings. For each section, describe the 
+                intended future state, including systems, processes, stakeholder experience, and organizational capabilities 
+                needed to effectively implement and administer the legislation.
 
                 -----
                 {chunk}
