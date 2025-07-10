@@ -42,7 +42,10 @@ You are an expert in IT-enabled legislative transformation. Carefully review the
 
 {chunk}
 
-Analyze the requirements, changes, and objectives. Based on your analysis, draft a cohesive target state concept document structured under the following headings and subheadings. For each section, describe the intended future state, including systems, processes, stakeholder experience, and organizational capabilities needed to effectively implement and administer the legislation.
+Analyze the requirements, changes, and objectives. Based on your analysis, draft a cohesive target state 
+concept document structured under the following headings and subheadings. For each section, describe the intended 
+future state, including systems, processes, stakeholder experience, and organizational capabilities needed to effectively 
+implement and administer the legislation.
 
 Headings:
 1. Regulatory Framework
@@ -68,7 +71,10 @@ Headings:
 def consolidate_summaries(summaries):
     prompt = f"""
 You are an expert in IT-enabled legislative transformation.
-Below are extracted target state concept summaries from several sections of legislation and requirements. Please consolidate them into a single, cohesive target state concept document under the following headings and subheadings. For each section, summarize the intended future state (systems, processes, stakeholder experience, organizational capabilities) required to implement and administer the legislation.
+Below are extracted target state concept summaries from several sections of legislation and requirements. Please 
+develop a detailed, cohesive target state concept document under the following headings and subheadings. 
+For each section, summarize the intended future state (systems, processes, stakeholder experience, organizational 
+capabilities) required to implement and administer the legislation.
 
 Headings:
 1. Regulatory Framework
