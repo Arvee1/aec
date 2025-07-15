@@ -3,21 +3,20 @@ import openai
 
 openai.api_key = st.secrets["api_key"]
 
-st.set_page_config(page_title="IT Requirements Extractor", layout="wide")
+st.set_page_config(page_title="Program Glossary Extractor", layout="wide")
 
-st.title("Wazzup!!! It is BA Arvee ready to go!")
+st.title("Wazzup!!! BA Arvee - Program Glossary Generator")
 
 st.write("""
 Upload a text file (project brief, business requirement, etc).
-This app will summarize **target state concepts** under the following headings:
-1. Regulatory Framework
-2. Digital Experience Platform 
-   a. DXP Features
-   b. Service Design
-3. Admin and Operational Systems
-   a. Legislative Reforms Process
-   b. Customer Management Capabilities
-   c. Enabling Capabilities (e.g. HR, service management, tech management)
+This app will extract and summarize a **Program Glossary** of important terms, grouped under clear headings such as:
+- General Terms
+- Technology & Systems
+- Project & Delivery
+- Stakeholders & Governance
+- Legislation & Policy
+- Processes & Methods
+Each term is briefly defined in plain language.
 """)
 
 uploaded_file = st.file_uploader("Choose a text file", type="txt")
@@ -36,27 +35,30 @@ def chunk_text(text, max_chars=5000):
         chunks.append(chunk)
     return chunks
 
-def summarize_chunk(chunk):
+def glossary_chunk(chunk):
     prompt = f"""
-You are an expert in IT-enabled legislative transformation. Carefully review the following legislation:
+You are an experienced business analyst extracting important terminology from program documentation.
+
+Carefully review the following text:
 
 {chunk}
 
-Analyze the requirements, changes, and objectives. Based on your analysis, draft a cohesive target state 
-concept document structured under the following headings and subheadings. For each section, describe the intended 
-future state, including systems, processes, stakeholder experience, and organizational capabilities needed to effectively 
-implement and administer the legislation.
+Identify **important program terms, acronyms, and key phrases** relevant to IT, projects, transformation, or legislation.
 
-Headings:
-1. Regulatory Framework
-2. Digital Experience Platform
-    a. DXP Features
-    b. Service Design
-3. Admin and Operational Systems
-    a. Legislative Reforms Process
-    b. Customer Management Capabilities
-    c. Enabling Capabilities (e.g. HR, service management, tech management)
+For each term, provide:
+ - The term or acronym
+ - A 1-2 sentence plain-language definition (contextualized to this material if possible)
+
+Organize the glossary into appropriately-titled sections to aid readability (e.g., General Terms, Technology & Systems, Project & Delivery, Stakeholders & Governance, Legislation & Policy, Processes & Methods).
+
+Format:
+
+# [Section Name]
+- **Term:** Definition
+
+Only extract and define significant and program-relevant terms or concepts.
 """
+
     try:
         response = openai.chat.completions.create(
             model="gpt-3.5-turbo",
@@ -68,26 +70,19 @@ Headings:
     except Exception as e:
         return f"Error: {e}"
 
-def consolidate_summaries(summaries):
+def consolidate_glossaries(glossaries):
     prompt = f"""
-You are an expert in IT-enabled legislative transformation.
-Below are extracted target state concept summaries from several sections of legislation and requirements. Please 
-develop a detailed, cohesive target state concept document under the following headings and subheadings. 
-For each section, summarize the intended future state (systems, processes, stakeholder experience, organizational 
-capabilities) required to implement and administer the legislation.
+You are an expert business analyst.
+Below are extracted program glossary sections from different parts of a requirement or legislative document.
 
-Headings:
-1. Regulatory Framework
-2. Digital Experience Platform
-    a. DXP Features
-    b. Service Design
-3. Admin and Operational Systems
-    a. Legislative Reforms Process
-    b. Customer Management Capabilities
-    c. Enabling Capabilities (e.g. HR, service management, tech management)
+Combine and rewrite them as a **single, de-duplicated, comprehensive Program Glossary**.
+- Organize the glossary under clear, logical section headings (e.g., General Terms, Technology & Systems, Project & Delivery, Stakeholders & Governance, Legislation & Policy, Processes & Methods).
+- For each term under each section, provide a short, context-relevant definition.
+
+Only include important and program-relevant terms.
 
 TEXT:
-{' '.join(summaries)}
+{' '.join(glossaries)}
 """
     try:
         response = openai.chat.completions.create(
@@ -100,15 +95,15 @@ TEXT:
     except Exception as e:
         return f"Error: {e}"
 
-def iterative_summarize(requirements_list, group_size=5):
+def iterative_glossary(requirements_list, group_size=5):
     if len(requirements_list) == 1:
         return requirements_list[0]
     summaries = []
     for i in range(0, len(requirements_list), group_size):
         group = requirements_list[i:i+group_size]
-        merged = consolidate_summaries(group)
+        merged = consolidate_glossaries(group)
         summaries.append(merged)
-    return iterative_summarize(summaries, group_size)
+    return iterative_glossary(summaries, group_size)
 
 if uploaded_file:
     content = uploaded_file.read().decode("utf-8")
@@ -116,23 +111,23 @@ if uploaded_file:
     st.write(f"File contains {len(content)} characters. Showing first 3000 chars below:\n\n")
     st.text_area("Preview", content[:3000] + ("..." if len(content) > 3000 else ""), height=300)
 
-    if st.button("Generate Target State Concepts"):
+    if st.button("Generate Program Glossary"):
         st.info("Large files will be processed in chunks and summarized in steps.")
-        with st.spinner("Extracting target state summary..."):
+        with st.spinner("Extracting program glossary..."):
 
             # Split content into manageable pieces
             chunks = chunk_text(content, max_chars=4000)
-            all_summaries = []
+            all_glossaries = []
 
             for i, chunk in enumerate(chunks):
                 st.write(f"Processing chunk {i+1}/{len(chunks)}")
-                summary = summarize_chunk(chunk)
-                all_summaries.append(summary)
+                glossary = glossary_chunk(chunk)
+                all_glossaries.append(glossary)
 
-            st.success("Initial extraction complete. Consolidating outputs so they fit within model limits...")
+            st.success("Initial extraction complete. Consolidating outputs...")
 
             # Hierarchical summarization
-            final_summary = iterative_summarize(all_summaries, group_size=5)
+            final_glossary = iterative_glossary(all_glossaries, group_size=5)
 
-            st.subheader("Target State Concept Summary")
-            st.write(final_summary)
+            st.subheader("Extracted Program Glossary")
+            st.write(final_glossary)
