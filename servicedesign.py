@@ -4,7 +4,7 @@ import os
 # r_token = st.secrets["REPLICATE_API_TOKEN"]
 
 # Set your Replicate API token in Streamlit secrets
-REPLICATE_API_TOKEN = st.secrets["replicate_api_token"]
+REPLICATE_API_TOKEN = st.secrets["REPLICATE_API_TOKEN"]
 
 st.set_page_config(page_title="Business Process Mapper (Claude via Replicate)", layout="wide")
 st.title("Business Process Mapper by User Type (Claude via Replicate)")
