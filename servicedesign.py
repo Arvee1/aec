@@ -1,7 +1,7 @@
 import replicate
 import streamlit as st 
-import os
-os.environ['REPLICATE_API_TOKEN'] = st.secrets["replicate_api_token"]
+# import os
+# os.environ['REPLICATE_API_TOKEN'] = st.secrets["replicate_api_token"]
 
 # Set your Replicate API token in Streamlit secrets
 # REPLICATE_API_TOKEN = st.secrets["replicate_api_token"]
