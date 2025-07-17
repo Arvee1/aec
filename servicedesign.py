@@ -36,7 +36,7 @@ def chunk_text(text, max_chars=5000):
 
 def call_claude_replicate(prompt, max_tokens=1200, temperature=0.3):
     output = replicate.run(
-        "anthropic/claude-3-haiku:latest",
+        "anthropic/claude-3.7-sonnet",
         input={
             "prompt": prompt,
             "max_tokens": max_tokens,
