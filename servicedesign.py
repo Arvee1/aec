@@ -1,7 +1,7 @@
 import replicate
 import streamlit as st 
 # import os
-# os.environ['REPLICATE_API_TOKEN'] = st.secrets["replicate_api_token"]
+r_token = st.secrets["replicate_api_token"]
 
 # Set your Replicate API token in Streamlit secrets
 # REPLICATE_API_TOKEN = st.secrets["replicate_api_token"]
@@ -42,7 +42,7 @@ def call_claude_replicate(prompt, max_tokens=1200, temperature=0.3):
             "max_tokens": max_tokens,
             "temperature": temperature,
         },
-        # api_token=REPLICATE_API_TOKEN
+        api_token=r_token
     )
     return "".join([str(part) for part in output])
 
