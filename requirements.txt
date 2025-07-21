@@ -13,3 +13,4 @@ SpeechRecognition
 replicate
 pyaudio
 streamlit-audiorecorder
+typing-extensions
