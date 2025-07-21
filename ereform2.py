@@ -17,7 +17,8 @@ from audiorecorder import audiorecorder
 CHROMA_DATA_PATH = "chroma_data/"
 EMBED_MODEL = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "ereform_docs"
-DOC_FILE = "24146b01_Electoral_Reform.txt"
+# DOC_FILE = "24146b01_Electoral_Reform.txt"
+DOC_FILE = "Factsheet by user type - summary4.txt"
 FEEDBACK_FILE = "user_feedback.jsonl"
 
 # --- SETUP EMBEDDING AND VECTOR DB ---
