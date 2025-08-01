@@ -55,8 +55,8 @@ class Config:
     CONTEXT_RESULTS = 8   # Use more context chunks for better answers
     
     # LLaMA settings
-    MAX_TOKENS = 1024     # Allow longer responses
-    TEMPERATURE = 0.3     # Lower temperature for more focused answers
+    MAX_TOKENS = 800      # Moderate length for clear, concise answers
+    TEMPERATURE = 0.4     # Balanced for accuracy and natural language
     TOP_P = 0.8
 
 class QueryLogger:
@@ -248,24 +248,32 @@ class LLaMAClient:
     
     def generate_response(self, prompt: str, context: str) -> str:
         """Generate response using LLaMA with context."""
-        system_prompt = """You are an expert assistant specializing in reform documentation. Your task is to provide comprehensive, accurate answers based on the provided context.
+        system_prompt = """You are a helpful assistant that explains reform documentation in simple, easy-to-understand language. Your goal is to make complex information accessible to everyday people.
 
 Guidelines:
-1. Use ONLY the information from the provided context
-2. If the context contains relevant information, provide a detailed, well-structured answer
-3. Quote specific sections when relevant
-4. If the context doesn't contain enough information, clearly state what's missing
-5. Organize your response with clear sections when dealing with complex topics
-6. Be specific and detailed rather than generic"""
+1. Use simple, everyday language - avoid jargon and technical terms
+2. Break down complex ideas into easy-to-follow points
+3. Use examples and analogies when helpful
+4. Keep sentences short and clear
+5. If you must use technical terms, explain them in plain English
+6. Structure your answer with clear headings or bullet points
+7. Focus on what matters most to the person asking
+8. Write like you're explaining to a friend or family member"""
         
-        full_prompt = f"""Based on the following context from reform documentation, please answer the user's question comprehensively.
+        full_prompt = f"""Based on the following information from reform documents, please answer the user's question in simple, clear language that anyone can understand.
 
 CONTEXT:
 {context}
 
 USER QUESTION: {prompt}
 
-INSTRUCTIONS: Provide a detailed answer using the context above. Structure your response clearly and quote relevant sections when helpful. If the context doesn't fully address the question, explain what information is available and what might be missing."""
+INSTRUCTIONS: 
+- Explain this in simple, everyday language
+- Avoid technical jargon - if you must use it, explain what it means
+- Break down complex ideas into easy steps
+- Use examples if helpful
+- Keep your answer clear and to the point
+- Think about what the person really needs to know"""
 
         try:
             result = ""
@@ -412,13 +420,25 @@ class RAGApp:
             return
             
         st.title("📊 Document Q&A Assistant")
-        st.markdown(f"Welcome back, **{st.session_state.username}**! Ask questions about the reform documentation.")
+        st.markdown(f"Welcome back, **{st.session_state.username}**! Ask questions about reforms in simple language.")
+        
+        # Add helpful examples
+        with st.expander("💡 Example Questions", expanded=False):
+            st.markdown("""
+            **Try asking questions like:**
+            - What are the main changes in the reform?
+            - How will this affect me?
+            - What do I need to do?
+            - When do these changes start?
+            - Who can help me with this?
+            - What are the benefits?
+            """)
         
         # Query input
         prompt = st.text_area(
             "What would you like to know?",
             height=100,
-            placeholder="Type your question here..."
+            placeholder="Ask your question in plain English - no need for technical terms!"
         )
         
         # Query button
@@ -466,8 +486,33 @@ class RAGApp:
             )
             
             # Display response
-            st.subheader("💬 Assistant Response:")
+            st.subheader("💬 Here's what I found:")
+            
+            # Add a friendly intro
+            st.markdown("*Let me explain this in simple terms:*")
             st.markdown(response)
+            
+            # Add helpful follow-up suggestions
+            st.markdown("---")
+            st.markdown("**Need more help?** Try asking:")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("📋 Can you give me an example?"):
+                    st.session_state['follow_up'] = f"Can you give me a specific example related to: {prompt}"
+                if st.button("🔍 Tell me more details"):
+                    st.session_state['follow_up'] = f"Can you explain more details about: {prompt}"
+            with col2:
+                if st.button("❓ How does this affect me?"):
+                    st.session_state['follow_up'] = f"How does this affect regular people: {prompt}"
+                if st.button("📅 When does this happen?"):
+                    st.session_state['follow_up'] = f"What are the timelines and dates for: {prompt}"
+            
+            # Show follow-up question if clicked
+            if 'follow_up' in st.session_state:
+                st.info(f"💡 **Follow-up question:** {st.session_state['follow_up']}")
+                if st.button("Ask this follow-up question"):
+                    self._process_query(st.session_state['follow_up'])
+                    del st.session_state['follow_up']
             
             # Show query statistics
             with st.expander("📊 Query Details"):
