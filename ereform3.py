@@ -2,8 +2,12 @@ import streamlit as st
 import sys
 import os
 import logging
+import time
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # SQLite3 workaround for deployment environments
 try:
@@ -38,8 +42,12 @@ class Config:
     MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "512"))
     TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.6"))
     
-    # Replicate model
+    # Replicate model and timeout settings
     REPLICATE_MODEL: str = os.getenv("REPLICATE_MODEL", "meta/meta-llama-3-70b-instruct")
+    REQUEST_TIMEOUT: int = int(os.getenv("REQUEST_TIMEOUT", "120"))  # 2 minutes
+    STREAM_TIMEOUT: int = int(os.getenv("STREAM_TIMEOUT", "300"))   # 5 minutes
+    MAX_RETRIES: int = int(os.getenv("MAX_RETRIES", "3"))
+    RETRY_DELAY: int = int(os.getenv("RETRY_DELAY", "2"))  # seconds
 
 config = Config()
 
@@ -196,16 +204,47 @@ def query_vectordb(collection, query: str, n_results: int = None) -> Optional[Li
         return None
 
 # --- LLM OPERATIONS ---
-def ask_llama(prompt: str, context: str) -> Optional[str]:
-    """Query Llama model with error handling and rate limiting"""
-    try:
-        if not prompt.strip():
-            return None
+def ask_llama_with_retry(prompt: str, context: str, max_retries: int = None) -> Optional[str]:
+    """Query Llama model with retry logic and timeout handling"""
+    max_retries = max_retries or config.MAX_RETRIES
+    
+    for attempt in range(max_retries):
+        try:
+            logger.info(f"Querying Llama model (attempt {attempt + 1}/{max_retries})")
+            result = ask_llama_single_attempt(prompt, context)
+            if result:
+                return result
+                
+        except (requests.exceptions.Timeout, 
+                requests.exceptions.ReadTimeout,
+                replicate.exceptions.ReplicateError) as e:
+            logger.warning(f"Attempt {attempt + 1} failed: {e}")
             
-        logger.info("Querying Llama model")
-        
-        # Construct full prompt
-        full_prompt = f"""Based on the following context, please answer the question accurately and concisely.
+            if attempt < max_retries - 1:  # Not the last attempt
+                wait_time = config.RETRY_DELAY * (attempt + 1)  # Exponential backoff
+                logger.info(f"Retrying in {wait_time} seconds...")
+                st.info(f"Request timed out. Retrying in {wait_time} seconds... (attempt {attempt + 1}/{max_retries})")
+                time.sleep(wait_time)
+            else:
+                logger.error(f"All {max_retries} attempts failed")
+                st.error("AI service is experiencing issues. Please try again with a shorter question or check back later.")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Unexpected error on attempt {attempt + 1}: {e}")
+            if attempt == max_retries - 1:  # Last attempt
+                st.error(f"AI processing failed: {e}")
+                return None
+    
+    return None
+
+def ask_llama_single_attempt(prompt: str, context: str) -> Optional[str]:
+    """Single attempt to query Llama model with timeout handling"""
+    if not prompt.strip():
+        return None
+    
+    # Construct full prompt
+    full_prompt = f"""Based on the following context, please answer the question accurately and concisely.
 
 Context:
 {context}
@@ -214,10 +253,15 @@ Question: {prompt}
 
 Answer:"""
 
-        result_ai = ""
+    result_ai = ""
+    start_time = time.time()
+    
+    try:
+        # Configure Replicate client with timeout
+        client = replicate.Client(api_token=os.getenv("REPLICATE_API_TOKEN"))
         
-        # Stream response from Replicate
-        for event in replicate.stream(
+        # Stream response with timeout monitoring
+        stream = client.stream(
             config.REPLICATE_MODEL,
             input={
                 "top_k": 50,
@@ -230,20 +274,53 @@ Answer:"""
                 "presence_penalty": 1.15,
                 "frequency_penalty": 0.2
             }
-        ):
-            result_ai += str(event)
+        )
         
-        logger.info("Llama model response received")
+        # Process stream with timeout monitoring
+        for event in stream:
+            current_time = time.time()
+            if current_time - start_time > config.STREAM_TIMEOUT:
+                logger.error(f"Stream timeout after {config.STREAM_TIMEOUT} seconds")
+                raise requests.exceptions.ReadTimeout("Stream processing timeout")
+            
+            result_ai += str(event)
+            
+            # Optional: Show progress to user
+            if len(result_ai) % 100 == 0 and len(result_ai) > 0:  # Every 100 characters
+                elapsed = current_time - start_time
+                st.info(f"Generating response... ({len(result_ai)} characters, {elapsed:.1f}s)")
+        
+        logger.info(f"Llama model response received in {time.time() - start_time:.2f}s")
         return result_ai.strip()
+        
+    except (requests.exceptions.Timeout, requests.exceptions.ReadTimeout) as e:
+        elapsed = time.time() - start_time
+        logger.error(f"Request timeout after {elapsed:.2f}s: {e}")
+        raise  # Re-raise for retry logic
         
     except replicate.exceptions.ReplicateError as e:
         logger.error(f"Replicate API error: {e}")
-        st.error("AI service is currently unavailable. Please try again later.")
-        return None
+        raise  # Re-raise for retry logic
+        
     except Exception as e:
-        logger.error(f"LLM query failed: {e}")
-        st.error(f"AI processing failed: {e}")
-        return None
+        logger.error(f"Unexpected error in LLM query: {e}")
+        raise
+
+def ask_llama(prompt: str, context: str) -> Optional[str]:
+    """Main LLM query function with fallbacks"""
+    # Try with retry logic first
+    result = ask_llama_with_retry(prompt, context)
+    
+    if not result:
+        # Fallback: Try with shorter context
+        logger.info("Retrying with shorter context")
+        short_context = context[:1000] + "..." if len(context) > 1000 else context
+        result = ask_llama_with_retry(prompt, short_context, max_retries=1)
+        
+        if result:
+            st.warning("⚠️ Response generated with reduced context due to timeout issues.")
+    
+    return result
 
 # --- INITIALIZATION ---
 def initialize_app() -> Tuple[Optional[object], Optional[List[str]]]:
@@ -324,28 +401,63 @@ def main():
         if not sanitized_prompt:
             st.warning("⚠️ Please enter a valid question!")
         else:
-            with st.spinner("🔍 Searching documents and generating answer..."):
-                # Query vector database
-                docs = query_vectordb(collection, sanitized_prompt, config.DEFAULT_RESULTS)
+            # Create a progress container
+            progress_container = st.empty()
+            status_container = st.empty()
+            
+            with progress_container:
+                st.info("🔍 Searching documents...")
+            
+            # Query vector database
+            docs = query_vectordb(collection, sanitized_prompt, config.DEFAULT_RESULTS)
+            
+            if not docs:
+                progress_container.empty()
+                st.info("ℹ️ No relevant context found in the documents.")
+            else:
+                # Show retrieved context (expandable)
+                with st.expander("📄 Retrieved Context", expanded=False):
+                    for i, doc in enumerate(docs[:config.CONTEXT_RESULTS], 1):
+                        st.markdown(f"**Context {i}:**")
+                        st.info(doc)
                 
-                if not docs:
-                    st.info("ℹ️ No relevant context found in the documents.")
+                with progress_container:
+                    st.info("🤖 Generating AI response...")
+                
+                with status_container:
+                    st.info("⏳ This may take up to 2-3 minutes. Please be patient...")
+                
+                # Generate answer with timeout handling
+                context = '\n\n---\n\n'.join(docs[:config.CONTEXT_RESULTS])
+                result = ask_llama(sanitized_prompt, context)
+                
+                # Clear progress indicators
+                progress_container.empty()
+                status_container.empty()
+                
+                if result:
+                    st.subheader("🎯 Answer:")
+                    st.markdown(result)
+                    
+                    # Show response time info
+                    st.caption("💡 Tip: For faster responses, try shorter questions or break complex questions into parts.")
                 else:
-                    # Show retrieved context (expandable)
-                    with st.expander("📄 Retrieved Context", expanded=False):
-                        for i, doc in enumerate(docs[:config.CONTEXT_RESULTS], 1):
-                            st.markdown(f"**Context {i}:**")
-                            st.info(doc)
+                    st.error("❌ Failed to generate answer after multiple attempts. Please try again with a shorter question.")
                     
-                    # Generate answer
-                    context = '\n\n---\n\n'.join(docs[:config.CONTEXT_RESULTS])
-                    result = ask_llama(sanitized_prompt, context)
-                    
-                    if result:
-                        st.subheader("🎯 Answer:")
-                        st.markdown(result)
-                    else:
-                        st.error("❌ Failed to generate answer. Please try again.")
+                    # Provide helpful suggestions
+                    with st.expander("💡 Troubleshooting Tips", expanded=True):
+                        st.markdown("""
+                        **If you're experiencing timeouts:**
+                        - Try breaking your question into smaller parts
+                        - Use simpler, more direct questions
+                        - Check if the AI service is experiencing high load
+                        - Wait a few minutes before trying again
+                        
+                        **Example of a good question format:**
+                        - "What are the main benefits of the reform?"
+                        - "How does this affect small businesses?"
+                        - "What are the implementation timelines?"
+                        """)
 
 if __name__ == "__main__":
     main()
