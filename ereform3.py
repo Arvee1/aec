@@ -2,184 +2,184 @@ import streamlit as st
 import sys
 import os
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
+from dataclasses import dataclass
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-# sqlite3 workaround with error handling
+# SQLite3 workaround for deployment environments
 try:
     __import__('pysqlite3')
     sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-    logger.info("Successfully applied pysqlite3 workaround")
-except ImportError as e:
-    logger.error(f"Failed to import pysqlite3: {e}")
-    st.error("Database setup failed. Please check your environment.")
-    st.stop()
+except ImportError:
+    pass  # Use system sqlite3 if pysqlite3 not available
 
-try:
-    import chromadb
-    from chromadb.utils import embedding_functions
-    from langchain.text_splitter import RecursiveCharacterTextSplitter
-    import replicate
-    from audiorecorder import audiorecorder
-except ImportError as e:
-    logger.error(f"Failed to import required packages: {e}")
-    st.error(f"Missing required package: {e}. Please install all dependencies.")
-    st.stop()
+import chromadb
+from chromadb.utils import embedding_functions
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+import replicate
 
 # --- CONFIGURATION ---
-CHROMA_DATA_PATH = "chroma_data/"
-EMBED_MODEL = "all-MiniLM-L6-v2"
-COLLECTION_NAME = "ereform_docs"
-DOC_FILE = "Factsheet by user type - summary4.txt"
+@dataclass
+class Config:
+    """Application configuration settings"""
+    CHROMA_DATA_PATH: str = os.getenv("CHROMA_DATA_PATH", "chroma_data/")
+    EMBED_MODEL: str = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
+    COLLECTION_NAME: str = os.getenv("COLLECTION_NAME", "ereform_docs")
+    DOC_FILE: str = os.getenv("DOC_FILE", "Factsheet by user type - summary4.txt")
+    
+    # Chunking parameters
+    CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "1000"))
+    CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "100"))
+    
+    # Query parameters
+    DEFAULT_RESULTS: int = int(os.getenv("DEFAULT_RESULTS", "10"))
+    CONTEXT_RESULTS: int = int(os.getenv("CONTEXT_RESULTS", "3"))
+    
+    # LLM parameters
+    MAX_TOKENS: int = int(os.getenv("MAX_TOKENS", "512"))
+    TEMPERATURE: float = float(os.getenv("TEMPERATURE", "0.6"))
+    
+    # Replicate model
+    REPLICATE_MODEL: str = os.getenv("REPLICATE_MODEL", "meta/meta-llama-3-70b-instruct")
 
-# Configurable parameters (moved from hard-coded values)
-CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 500))
-CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP', 20))
-DEFAULT_N_RESULTS = int(os.getenv('DEFAULT_N_RESULTS', 15))
-MAX_TOKENS = int(os.getenv('MAX_TOKENS', 512))
+config = Config()
 
-# --- VALIDATION FUNCTIONS ---
-def validate_environment() -> bool:
-    """Validate that all required files and environment variables exist."""
+# --- LOGGING SETUP ---
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# --- UTILITY FUNCTIONS ---
+def validate_inputs() -> bool:
+    """Validate required environment variables and files"""
     try:
         # Check if document file exists
-        if not os.path.exists(DOC_FILE):
-            st.error(f"📄 Document file not found: {DOC_FILE}")
-            logger.error(f"Document file missing: {DOC_FILE}")
+        if not os.path.exists(config.DOC_FILE):
+            st.error(f"Document file not found: {config.DOC_FILE}")
             return False
         
-        # Check if Replicate API key is available
-        replicate_token = os.getenv('REPLICATE_API_TOKEN')
-        if not replicate_token:
-            st.warning("⚠️ REPLICATE_API_TOKEN not found. AI responses may fail.")
-            logger.warning("Replicate API token not configured")
-        
-        # Create chroma directory if it doesn't exist
-        os.makedirs(CHROMA_DATA_PATH, exist_ok=True)
-        logger.info("Environment validation passed")
+        # Check if Replicate API key is set
+        if not os.getenv("REPLICATE_API_TOKEN"):
+            st.error("REPLICATE_API_TOKEN environment variable not set")
+            return False
+            
         return True
-        
     except Exception as e:
-        logger.error(f"Environment validation failed: {e}")
-        st.error(f"Environment setup failed: {e}")
+        logger.error(f"Validation error: {e}")
+        st.error(f"Configuration error: {e}")
         return False
 
-# --- SETUP EMBEDDING AND VECTOR DB ---
+def sanitize_input(text: str) -> str:
+    """Basic input sanitization"""
+    if not isinstance(text, str):
+        return ""
+    
+    # Remove excessive whitespace and limit length
+    sanitized = text.strip()[:2000]  # Reasonable length limit
+    
+    # Basic security: remove potential script injections
+    dangerous_patterns = ['<script', 'javascript:', 'data:']
+    for pattern in dangerous_patterns:
+        sanitized = sanitized.replace(pattern, '')
+    
+    return sanitized
+
+# --- VECTOR DATABASE OPERATIONS ---
 @st.cache_resource
 def get_chroma_collection():
-    """Initialize ChromaDB collection with error handling."""
+    """Initialize and return ChromaDB collection with error handling"""
     try:
-        logger.info("Initializing ChromaDB collection...")
-        client = chromadb.PersistentClient(path=CHROMA_DATA_PATH)
+        logger.info("Initializing ChromaDB collection")
+        client = chromadb.PersistentClient(path=config.CHROMA_DATA_PATH)
         embedding_func = embedding_functions.SentenceTransformerEmbeddingFunction(
-            model_name=EMBED_MODEL
+            model_name=config.EMBED_MODEL
         )
         collection = client.get_or_create_collection(
-            name=COLLECTION_NAME,
+            name=config.COLLECTION_NAME,
             embedding_function=embedding_func,
             metadata={"hnsw:space": "cosine"}
         )
-        logger.info(f"ChromaDB collection '{COLLECTION_NAME}' initialized successfully")
+        logger.info(f"ChromaDB collection initialized with {collection.count()} documents")
         return collection
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB: {e}")
         st.error(f"Database initialization failed: {e}")
-        st.stop()
+        return None
 
 @st.cache_data
-def chunk_document(doc_file: str) -> List[str]:
-    """Load and chunk the document with error handling."""
+def chunk_document(doc_file: str) -> Optional[List[str]]:
+    """Load and chunk document with error handling"""
     try:
         logger.info(f"Loading and chunking document: {doc_file}")
-        with open(doc_file, "r", encoding='utf-8') as f:
-            hansard = f.read()
+        with open(doc_file, "r", encoding="utf-8") as f:
+            content = f.read()
         
-        if not hansard.strip():
+        if not content.strip():
             logger.warning("Document is empty")
-            st.warning("📄 Document appears to be empty")
             return []
-            
+        
         splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE, 
-            chunk_overlap=CHUNK_OVERLAP, 
+            chunk_size=config.CHUNK_SIZE,
+            chunk_overlap=config.CHUNK_OVERLAP,
             length_function=len
         )
-        chunks = splitter.split_text(hansard)
+        chunks = splitter.split_text(content)
         logger.info(f"Document chunked into {len(chunks)} pieces")
         return chunks
         
     except FileNotFoundError:
         logger.error(f"Document file not found: {doc_file}")
-        st.error(f"📄 Document file not found: {doc_file}")
-        return []
-    except UnicodeDecodeError as e:
-        logger.error(f"Failed to read document (encoding issue): {e}")
-        st.error("📄 Document encoding issue. Please check file format.")
-        return []
+        st.error(f"Document file not found: {doc_file}")
+        return None
     except Exception as e:
         logger.error(f"Failed to chunk document: {e}")
-        st.error(f"📄 Failed to process document: {e}")
-        return []
+        st.error(f"Document processing failed: {e}")
+        return None
 
 def populate_vectordb_if_empty(collection, chunks: List[str]) -> bool:
-    """Populate vector database if empty, with error handling."""
+    """Populate vector database if empty"""
     try:
-        if not chunks:
-            logger.warning("No chunks to populate vectordb")
+        if not collection or not chunks:
             return False
             
-        count = collection.count()
-        logger.info(f"Current vectordb count: {count}")
-        
-        if not count:  # no docs stored yet
-            logger.info("Populating empty vectordb...")
-            ids = [f"id{i}" for i in range(len(chunks))]
+        if collection.count() == 0:
+            logger.info("Populating empty vector database")
+            ids = [f"doc_chunk_{i}" for i in range(len(chunks))]
             collection.add(documents=chunks, ids=ids)
-            logger.info(f"Vectordb populated with {len(chunks)} documents")
-            return True
-        else:
-            logger.info("Vectordb already populated")
-            return False
-            
+            logger.info(f"Added {len(chunks)} chunks to vector database")
+        return True
     except Exception as e:
-        logger.error(f"Failed to populate vectordb: {e}")
-        st.error(f"🔍 Database population failed: {e}")
+        logger.error(f"Failed to populate vector database: {e}")
+        st.error(f"Database population failed: {e}")
         return False
 
 def reindex_vectordb(collection, chunks: List[str]) -> bool:
-    """Reindex the vector database with error handling."""
+    """Reindex vector database with new chunks"""
     try:
-        if not chunks:
-            logger.error("No chunks available for reindexing")
-            st.error("No document chunks available for reindexing")
+        if not collection or not chunks:
             return False
             
-        logger.info("Reindexing vectordb...")
-        collection.delete(where={})  # Wipe all docs
-        ids = [f"id{i}" for i in range(len(chunks))]
+        logger.info("Reindexing vector database")
+        collection.delete(where={})  # Clear all documents
+        ids = [f"doc_chunk_{i}" for i in range(len(chunks))]
         collection.add(documents=chunks, ids=ids)
-        logger.info(f"Vectordb reindexed with {len(chunks)} documents")
+        logger.info(f"Reindexed {len(chunks)} chunks")
         return True
-        
     except Exception as e:
-        logger.error(f"Failed to reindex vectordb: {e}")
-        st.error(f"🔍 Database reindexing failed: {e}")
+        logger.error(f"Failed to reindex vector database: {e}")
+        st.error(f"Database reindexing failed: {e}")
         return False
 
-def query_vectordb(collection, query: str, n_results: int = DEFAULT_N_RESULTS) -> List[str]:
-    """Query vector database with error handling and logging."""
+def query_vectordb(collection, query: str, n_results: int = None) -> Optional[List[str]]:
+    """Query vector database with error handling"""
     try:
-        if not query.strip():
-            logger.warning("Empty query provided")
-            return []
+        if not collection or not query.strip():
+            return None
             
-        logger.info(f"Querying vectordb: '{query[:50]}...' (n_results={n_results})")
+        n_results = n_results or config.DEFAULT_RESULTS
+        logger.info(f"Querying vector database for: {query[:50]}...")
+        
         results = collection.query(
             query_texts=[query],
             include=["documents"],
@@ -187,175 +187,165 @@ def query_vectordb(collection, query: str, n_results: int = DEFAULT_N_RESULTS) -
         )
         
         docs = results.get("documents", [[]])[0]
-        logger.info(f"Found {len(docs)} relevant documents")
-        
-        # Log first few characters of each result for debugging
-        for i, doc in enumerate(docs[:3]):
-            logger.debug(f"Result {i+1}: {doc[:100]}...")
-            
+        logger.info(f"Retrieved {len(docs)} relevant documents")
         return docs
         
     except Exception as e:
-        logger.error(f"Failed to query vectordb: {e}")
-        st.error(f"🔍 Search failed: {e}")
-        return []
+        logger.error(f"Vector database query failed: {e}")
+        st.error(f"Search failed: {e}")
+        return None
 
-def ask_llama(prompt: str, context: str) -> str:
-    """Query Llama model with comprehensive error handling."""
+# --- LLM OPERATIONS ---
+def ask_llama(prompt: str, context: str) -> Optional[str]:
+    """Query Llama model with error handling and rate limiting"""
     try:
         if not prompt.strip():
-            return "Please provide a valid question."
+            return None
             
-        logger.info(f"Asking AI: '{prompt[:50]}...'")
-        full_prompt = f"Prompt: {prompt}\nContext: {context}"
+        logger.info("Querying Llama model")
         
-        # Validate context isn't too long
-        if len(full_prompt) > 10000:  # Rough token limit check
-            logger.warning("Context too long, truncating...")
-            context = context[:8000] + "...[truncated]"
-            full_prompt = f"Prompt: {prompt}\nContext: {context}"
-        
+        # Construct full prompt
+        full_prompt = f"""Based on the following context, please answer the question accurately and concisely.
+
+Context:
+{context}
+
+Question: {prompt}
+
+Answer:"""
+
         result_ai = ""
         
-        # Stream response with timeout handling
-        try:
-            event_count = 0
-            for event in replicate.stream(
-                "meta/meta-llama-3-70b-instruct",
-                input={
-                    "top_k": 50,
-                    "top_p": 0.9,
-                    "prompt": full_prompt,
-                    "max_tokens": MAX_TOKENS,
-                    "min_tokens": 0,
-                    "temperature": 0.6,
-                    "prompt_template": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
-                    "presence_penalty": 1.15,
-                    "frequency_penalty": 0.2
-                }
-            ):
-                result_ai += str(event)
-                event_count += 1
-                
-                # Prevent infinite loops
-                if event_count > 1000:
-                    logger.warning("Too many events from Replicate, breaking...")
-                    break
-                    
-        except Exception as stream_error:
-            logger.error(f"Streaming error: {stream_error}")
-            raise
-            
-        if not result_ai.strip():
-            logger.warning("Empty response from AI")
-            return "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
-            
-        logger.info(f"AI response generated ({len(result_ai)} characters)")
+        # Stream response from Replicate
+        for event in replicate.stream(
+            config.REPLICATE_MODEL,
+            input={
+                "top_k": 50,
+                "top_p": 0.9,
+                "prompt": full_prompt,
+                "max_tokens": config.MAX_TOKENS,
+                "min_tokens": 0,
+                "temperature": config.TEMPERATURE,
+                "prompt_template": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant that answers questions based on provided context.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                "presence_penalty": 1.15,
+                "frequency_penalty": 0.2
+            }
+        ):
+            result_ai += str(event)
+        
+        logger.info("Llama model response received")
         return result_ai.strip()
         
     except replicate.exceptions.ReplicateError as e:
         logger.error(f"Replicate API error: {e}")
-        return f"🤖 AI service temporarily unavailable: {str(e)}"
+        st.error("AI service is currently unavailable. Please try again later.")
+        return None
     except Exception as e:
-        logger.error(f"Unexpected error in ask_llama: {e}")
-        return f"🤖 Sorry, I encountered an error: {str(e)}"
+        logger.error(f"LLM query failed: {e}")
+        st.error(f"AI processing failed: {e}")
+        return None
 
-# --- INITIALIZE (WITH VALIDATION) ---
-def initialize_app():
-    """Initialize the application with proper error handling."""
-    try:
-        # Validate environment first
-        if not validate_environment():
-            st.stop()
-            
-        # Initialize components
-        collection = get_chroma_collection()
-        hansard_chunks = chunk_document(DOC_FILE)
-        
-        if not hansard_chunks:
-            st.error("❌ Failed to load document. Please check the file.")
-            st.stop()
-            
-        # Populate database
-        populated = populate_vectordb_if_empty(collection, hansard_chunks)
-        if populated:
-            st.success(f"✅ Loaded {len(hansard_chunks)} document chunks into database")
-            
-        return collection, hansard_chunks
-        
-    except Exception as e:
-        logger.error(f"App initialization failed: {e}")
-        st.error(f"❌ App initialization failed: {e}")
+# --- INITIALIZATION ---
+def initialize_app() -> Tuple[Optional[object], Optional[List[str]]]:
+    """Initialize application components"""
+    if not validate_inputs():
+        return None, None
+    
+    # Initialize vector database
+    collection = get_chroma_collection()
+    if not collection:
+        return None, None
+    
+    # Load and chunk document
+    chunks = chunk_document(config.DOC_FILE)
+    if not chunks:
+        return None, None
+    
+    # Populate database if empty
+    if not populate_vectordb_if_empty(collection, chunks):
+        return None, None
+    
+    return collection, chunks
+
+# --- STREAMLIT UI ---
+def main():
+    """Main application function"""
+    st.set_page_config(
+        page_title="Reform Document Q&A",
+        page_icon="📊",
+        layout="wide"
+    )
+    
+    st.title("📊 Reform Document Q&A Assistant")
+    st.markdown("Ask me anything about the reform documents and I'll provide context-aware answers!")
+    
+    # Initialize app
+    with st.spinner("Initializing application..."):
+        collection, chunks = initialize_app()
+    
+    if not collection or not chunks:
+        st.error("Application initialization failed. Please check your configuration.")
         st.stop()
-
-# Initialize the app
-collection, hansard_chunks = initialize_app()
-
-# --- APP UI ---
-st.title("📊 WAZZUP!!! Ask me anything about reforms")
-
-# Debug info in sidebar
-with st.sidebar:
-    st.subheader("🔧 Debug Info")
-    if collection:
-        try:
-            doc_count = collection.count()
-            st.metric("Documents in DB", doc_count)
-        except:
-            st.metric("Documents in DB", "Error")
     
-    st.metric("Chunk Size", CHUNK_SIZE)
-    st.metric("Max Tokens", MAX_TOKENS)
-    
-    # Re-index button
-    if st.button("🔄 Re-index Document"):
-        with st.spinner("Re-indexing..."):
-            success = reindex_vectordb(collection, hansard_chunks)
-        if success:
-            st.success("✅ Re-indexed successfully!")
-        else:
-            st.error("❌ Re-indexing failed!")
-
-# Main interface
-prompt = st.text_area("What do you want to know?", height=100)
-
-if st.button("Ask Arvee", type="primary"):
-    if not prompt.strip():
-        st.warning("You need to type a question! I can't read your mind...yet 🙃")
-    else:
-        with st.spinner("🔍 Retrieving info and asking the AI..."):
-            try:
-                # Query the database
-                docs = query_vectordb(collection, prompt, n_results=10)
-                
-                if docs:
-                    # Show retrieved context
-                    with st.expander("📖 Retrieved Context", expanded=False):
-                        for i, d in enumerate(docs[:3], 1):
-                            st.info(f"**Context {i}:** {d}")
-                    
-                    # Get AI response
-                    context_for_ai = '\n---\n'.join(docs[:3])
-                    result = ask_llama(prompt, context_for_ai)
-                    
-                    # Display result
-                    st.subheader("🤖 Arvee says:")
-                    st.write(result)
-                    
-                    # Debug info
-                    with st.expander("🔍 Debug Info"):
-                        st.write(f"**Query:** {prompt}")
-                        st.write(f"**Retrieved {len(docs)} documents**")
-                        st.write(f"**Response length:** {len(result)} characters")
-                        
+    # Sidebar for configuration (optional)
+    with st.sidebar:
+        st.header("⚙️ Settings")
+        st.info(f"Document: {os.path.basename(config.DOC_FILE)}")
+        st.info(f"Total chunks: {len(chunks)}")
+        st.info(f"Database entries: {collection.count()}")
+        
+        if st.button("🔄 Re-index Document", help="Reload and re-index the document"):
+            with st.spinner("Re-indexing document..."):
+                if reindex_vectordb(collection, chunks):
+                    st.success("✅ Document re-indexed successfully!")
+                    st.rerun()
                 else:
-                    st.info("🤷 No relevant context found in the documents.")
-                    logger.warning(f"No results for query: {prompt}")
+                    st.error("❌ Re-indexing failed")
+    
+    # Main query interface
+    col1, col2 = st.columns([3, 1])
+    
+    with col1:
+        prompt = st.text_area(
+            "What would you like to know?",
+            placeholder="Enter your question about the reform documents...",
+            height=100
+        )
+    
+    with col2:
+        st.write("")  # Spacing
+        st.write("")  # Spacing
+        ask_button = st.button("🤖 Ask Assistant", type="primary", use_container_width=True)
+    
+    # Handle query
+    if ask_button:
+        sanitized_prompt = sanitize_input(prompt)
+        
+        if not sanitized_prompt:
+            st.warning("⚠️ Please enter a valid question!")
+        else:
+            with st.spinner("🔍 Searching documents and generating answer..."):
+                # Query vector database
+                docs = query_vectordb(collection, sanitized_prompt, config.DEFAULT_RESULTS)
+                
+                if not docs:
+                    st.info("ℹ️ No relevant context found in the documents.")
+                else:
+                    # Show retrieved context (expandable)
+                    with st.expander("📄 Retrieved Context", expanded=False):
+                        for i, doc in enumerate(docs[:config.CONTEXT_RESULTS], 1):
+                            st.markdown(f"**Context {i}:**")
+                            st.info(doc)
                     
-            except Exception as e:
-                logger.error(f"Query processing failed: {e}")
-                st.error(f"❌ Something went wrong: {e}")
+                    # Generate answer
+                    context = '\n\n---\n\n'.join(docs[:config.CONTEXT_RESULTS])
+                    result = ask_llama(sanitized_prompt, context)
+                    
+                    if result:
+                        st.subheader("🎯 Answer:")
+                        st.markdown(result)
+                    else:
+                        st.error("❌ Failed to generate answer. Please try again.")
 
-# Footer with status
-st.markdown("---")
-st.markdown("💡 **Tip:** Check the sidebar for debug information and re-indexing options.")
+if __name__ == "__main__":
+    main()
