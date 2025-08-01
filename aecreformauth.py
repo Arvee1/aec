@@ -16,11 +16,6 @@ Features:
 
 import streamlit as st
 import sys
-
-# sqlite3 workaround
-__import__('pysqlite3')
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-
 from pathlib import Path
 import logging
 from typing import List, Optional, Tuple
@@ -52,17 +47,17 @@ class Config:
     QUERY_LOG_FILE = "user_queries.json"
     
     # Document processing
-    CHUNK_SIZE = 500
-    CHUNK_OVERLAP = 20
+    CHUNK_SIZE = 800      # Larger chunks for more context per piece
+    CHUNK_OVERLAP = 100   # More overlap to preserve context between chunks
     
     # Query settings  
-    DEFAULT_RESULTS = 10
-    CONTEXT_RESULTS = 3
+    DEFAULT_RESULTS = 20  # Retrieve more documents for better coverage
+    CONTEXT_RESULTS = 8   # Use more context chunks for better answers
     
     # LLaMA settings
-    MAX_TOKENS = 512
-    TEMPERATURE = 0.6
-    TOP_P = 0.9
+    MAX_TOKENS = 1024     # Allow longer responses
+    TEMPERATURE = 0.3     # Lower temperature for more focused answers
+    TOP_P = 0.8
 
 class QueryLogger:
     """Handles logging of user queries and responses."""
@@ -253,15 +248,24 @@ class LLaMAClient:
     
     def generate_response(self, prompt: str, context: str) -> str:
         """Generate response using LLaMA with context."""
-        system_prompt = """You are a helpful assistant that answers questions based on the provided context. 
-        Use the context to provide accurate, relevant answers. If the context doesn't contain enough information 
-        to answer the question, say so clearly."""
+        system_prompt = """You are an expert assistant specializing in reform documentation. Your task is to provide comprehensive, accurate answers based on the provided context.
+
+Guidelines:
+1. Use ONLY the information from the provided context
+2. If the context contains relevant information, provide a detailed, well-structured answer
+3. Quote specific sections when relevant
+4. If the context doesn't contain enough information, clearly state what's missing
+5. Organize your response with clear sections when dealing with complex topics
+6. Be specific and detailed rather than generic"""
         
-        full_prompt = f"""Context: {context}
+        full_prompt = f"""Based on the following context from reform documentation, please answer the user's question comprehensively.
 
-Question: {prompt}
+CONTEXT:
+{context}
 
-Please provide a helpful answer based on the context above."""
+USER QUESTION: {prompt}
+
+INSTRUCTIONS: Provide a detailed answer using the context above. Structure your response clearly and quote relevant sections when helpful. If the context doesn't fully address the question, explain what information is available and what might be missing."""
 
         try:
             result = ""
@@ -442,10 +446,10 @@ class RAGApp:
             # Show retrieved context (top 3)
             context_docs = similar_docs[:self.config.CONTEXT_RESULTS]
             
-            with st.expander("📋 Retrieved Context", expanded=False):
+            with st.expander("📋 Retrieved Context", expanded=True):  # Expand by default for debugging
                 for i, doc in enumerate(context_docs, 1):
                     st.markdown(f"**Chunk {i}:**")
-                    st.text(doc[:200] + "..." if len(doc) > 200 else doc)
+                    st.text(doc)  # Show full chunks instead of truncated
                     st.divider()
         
         with st.spinner("🤖 Generating response..."):
@@ -470,7 +474,24 @@ class RAGApp:
                 st.write(f"**Documents retrieved:** {len(similar_docs)}")
                 st.write(f"**Context chunks used:** {len(context_docs)}")
                 st.write(f"**Total context length:** {len(context)} characters")
+                st.write(f"**Average chunk length:** {len(context) // len(context_docs) if context_docs else 0} characters")
                 st.write(f"**Query logged:** ✅ Yes")
+                
+                # Show similarity scores if available (for debugging)
+                if hasattr(self.vector_db.collection, 'query'):
+                    try:
+                        results_with_scores = self.vector_db.collection.query(
+                            query_texts=[prompt],
+                            include=["documents", "distances"],
+                            n_results=len(context_docs)
+                        )
+                        if "distances" in results_with_scores:
+                            distances = results_with_scores["distances"][0]
+                            st.write("**Similarity scores (lower = more similar):**")
+                            for i, distance in enumerate(distances[:3]):
+                                st.write(f"Chunk {i+1}: {distance:.3f}")
+                    except:
+                        pass
 
 def main():
     """Main application entry point."""
