@@ -243,7 +243,7 @@ def truncate_context(prompt: str, context: str, max_total: int = 8000) -> str:
     return context
 
 def ask_llama(prompt: str, context: str) -> str:
-    """Query Llama model with comprehensive error handling."""
+    """Query Llama model with comprehensive error handling and timeout management."""
     try:
         # Sanitize inputs
         prompt = sanitize_input(prompt, 500)
@@ -258,9 +258,11 @@ def ask_llama(prompt: str, context: str) -> str:
         
         result_ai = ""
         event_count = 0
-        max_events = 1000
+        max_events = 500  # Reduced to prevent long waits
+        start_time = time.time()
+        max_wait_time = 60  # Maximum 60 seconds
         
-        # Stream response with timeout handling
+        # Try streaming first, fall back to non-streaming if timeout
         try:
             for event in replicate.stream(
                 "meta/meta-llama-3-70b-instruct",
@@ -279,6 +281,11 @@ def ask_llama(prompt: str, context: str) -> str:
                 result_ai += str(event)
                 event_count += 1
                 
+                # Check for timeout
+                if time.time() - start_time > max_wait_time:
+                    logger.warning(f"Stream timeout after {max_wait_time} seconds")
+                    break
+                
                 # Prevent infinite loops
                 if event_count > max_events:
                     logger.warning(f"Reached maximum events ({max_events}), stopping stream")
@@ -286,21 +293,48 @@ def ask_llama(prompt: str, context: str) -> str:
                     
         except Exception as stream_error:
             logger.error(f"Streaming error: {stream_error}")
-            raise
+            # Fall back to non-streaming API call
+            logger.info("Falling back to non-streaming API call")
+            try:
+                result_ai = replicate.run(
+                    "meta/meta-llama-3-70b-instruct",
+                    input={
+                        "top_k": 50,
+                        "top_p": 0.9,
+                        "prompt": full_prompt,
+                        "max_tokens": MAX_TOKENS,
+                        "min_tokens": 0,
+                        "temperature": 0.6,
+                        "prompt_template": "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n",
+                        "presence_penalty": 1.15,
+                        "frequency_penalty": 0.2
+                    }
+                )
+                if isinstance(result_ai, list):
+                    result_ai = "".join(result_ai)
+                logger.info("Non-streaming fallback successful")
+            except Exception as fallback_error:
+                logger.error(f"Fallback API call also failed: {fallback_error}")
+                return "🤖 I'm experiencing technical difficulties. Please try again in a moment."
             
-        if not result_ai.strip():
+        if not result_ai or not str(result_ai).strip():
             logger.warning("Empty response from AI")
-            return "I apologize, but I couldn't generate a proper response. Please try rephrasing your question."
+            return "I apologize, but I couldn't generate a proper response. Please try rephrasing your question or try again in a moment."
             
-        logger.info(f"AI response generated ({len(result_ai)} characters)")
-        return result_ai.strip()
+        response_text = str(result_ai).strip()
+        logger.info(f"AI response generated ({len(response_text)} characters)")
+        return response_text
         
     except replicate.exceptions.ReplicateError as e:
         logger.error(f"Replicate API error: {e}")
-        return f"🤖 AI service temporarily unavailable. Please try again later."
+        if "timeout" in str(e).lower():
+            return "🤖 The AI is taking longer than usual to respond. Please try with a shorter question or try again in a moment."
+        return "🤖 AI service temporarily unavailable. Please try again later."
     except Exception as e:
         logger.error(f"Unexpected error in ask_llama: {e}")
-        return f"🤖 Sorry, I encountered an error processing your request. Please try again."
+        if "timeout" in str(e).lower():
+            return "🤖 Request timed out. Please try with a shorter question or try again in a moment."
+        return "🤖 Sorry, I encountered an error processing your request. Please try again."
 
 # --- INITIALIZE (WITH VALIDATION) ---
 def initialize_app():
@@ -371,38 +405,49 @@ def main():
         if not prompt.strip():
             st.warning("You need to type a question! I can't read your mind...yet 🙃")
         else:
-            with st.spinner("🔍 Retrieving info and asking the AI..."):
-                try:
-                    # Query the database
-                    docs = query_vectordb(collection, prompt, n_results=DEFAULT_N_RESULTS)
-                    
-                    if docs:
-                        # Show retrieved context
-                        with st.expander("📖 Retrieved Context", expanded=False):
-                            for i, d in enumerate(docs[:3], 1):
-                                st.info(f"**Context {i}:** {d}")
-                        
-                        # Get AI response
-                        context_for_ai = '\n---\n'.join(docs)
-                        result = ask_llama(prompt, context_for_ai)
-                        
-                        # Display result
-                        st.subheader("🤖 Arvee says:")
-                        st.write(result)
-                        
-                        # Debug info
-                        with st.expander("🔍 Debug Info"):
-                            st.write(f"**Retrieved {len(docs)} documents**")
-                            st.write(f"**Response length:** {len(result)} characters")
-                            st.write(f"**Context length:** {len(context_for_ai)} characters")
+            # Show a more informative progress message
+            progress_container = st.empty()
+            with progress_container:
+                with st.spinner("🔍 Searching documents..."):
+                    try:
+                        # Query the database
+                        docs = query_vectordb(collection, prompt, n_results=DEFAULT_N_RESULTS)
+            
+            if docs:
+                with progress_container:
+                    with st.spinner("🤖 Generating AI response (this may take up to 60 seconds)..."):
+                        try:
+                            # Show retrieved context
+                            with st.expander("📖 Retrieved Context", expanded=False):
+                                for i, d in enumerate(docs[:3], 1):
+                                    st.info(f"**Context {i}:** {d}")
                             
-                    else:
-                        st.info("🤷 No relevant context found in the documents.")
-                        logger.warning("No results found for user query")
-                        
-                except Exception as e:
-                    logger.error(f"Query processing failed: {e}")
-                    st.error(f"❌ Something went wrong: {e}")
+                            # Get AI response
+                            context_for_ai = '\n---\n'.join(docs)
+                            result = ask_llama(prompt, context_for_ai)
+                            
+                            # Clear progress container
+                            progress_container.empty()
+                            
+                            # Display result
+                            st.subheader("🤖 Arvee says:")
+                            st.write(result)
+                            
+                            # Debug info
+                            with st.expander("🔍 Debug Info"):
+                                st.write(f"**Retrieved {len(docs)} documents**")
+                                st.write(f"**Response length:** {len(result)} characters")
+                                st.write(f"**Context length:** {len(context_for_ai)} characters")
+                                
+                        except Exception as ai_error:
+                            progress_container.empty()
+                            logger.error(f"AI processing failed: {ai_error}")
+                            st.error("🤖 AI processing failed. Please try again with a shorter question.")
+                            
+            else:
+                progress_container.empty()
+                st.info("🤷 No relevant context found in the documents.")
+                logger.warning("No results found for user query")
 
     # Footer with status
     st.markdown("---")
