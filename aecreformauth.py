@@ -1,11 +1,13 @@
 """
-Enhanced RAG Document Query Application
-=====================================
+Enhanced RAG Document Query Application with User Authentication
+===============================================================
 
 A Streamlit-based Retrieval-Augmented Generation (RAG) application that allows users
 to query documents using vector similarity search backed by ChromaDB and LLaMA.
 
 Features:
+- User authentication and session management
+- Query logging to JSON file
 - Document chunking and vectorization
 - Semantic search with ChromaDB
 - LLaMA-powered response generation
@@ -129,6 +131,8 @@ class QueryLogger:
         except Exception as e:
             logger.error(f"Failed to get recent queries: {e}")
             return []
+
+class VectorDBManager:
     """Manages ChromaDB operations and document vectorization."""
     
     def __init__(self, config: Config):
