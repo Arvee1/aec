@@ -2,6 +2,7 @@ import streamlit as st
 import sys
 import os
 import logging
+import time
 from typing import List, Optional
 
 # Configure logging
@@ -38,11 +39,23 @@ EMBED_MODEL = "all-MiniLM-L6-v2"
 COLLECTION_NAME = "ereform_docs"
 DOC_FILE = "Factsheet by user type - summary4.txt"
 
-# Configurable parameters (moved from hard-coded values)
-CHUNK_SIZE = int(os.getenv('CHUNK_SIZE', 500))
-CHUNK_OVERLAP = int(os.getenv('CHUNK_OVERLAP', 20))
-DEFAULT_N_RESULTS = int(os.getenv('DEFAULT_N_RESULTS', 15))
-MAX_TOKENS = int(os.getenv('MAX_TOKENS', 512))
+# Safe environment variable parsing
+def safe_int_env(key: str, default: int) -> int:
+    """Safely parse environment variables to integers."""
+    try:
+        value = os.getenv(key)
+        if value is None:
+            return default
+        return int(value)
+    except (ValueError, TypeError):
+        logger.warning(f"Invalid value for {key}, using default: {default}")
+        return default
+
+# Configurable parameters with safe parsing
+CHUNK_SIZE = safe_int_env('CHUNK_SIZE', 500)
+CHUNK_OVERLAP = safe_int_env('CHUNK_OVERLAP', 20)
+DEFAULT_N_RESULTS = safe_int_env('DEFAULT_N_RESULTS', 5)  # Reduced for better performance
+MAX_TOKENS = safe_int_env('MAX_TOKENS', 512)
 
 # --- VALIDATION FUNCTIONS ---
 def validate_environment() -> bool:
@@ -90,7 +103,7 @@ def get_chroma_collection():
     except Exception as e:
         logger.error(f"Failed to initialize ChromaDB: {e}")
         st.error(f"Database initialization failed: {e}")
-        st.stop()
+        raise
 
 @st.cache_data
 def chunk_document(doc_file: str) -> List[str]:
@@ -162,6 +175,10 @@ def reindex_vectordb(collection, chunks: List[str]) -> bool:
             
         logger.info("Reindexing vectordb...")
         collection.delete(where={})  # Wipe all docs
+        
+        # Add a small delay to ensure delete completes
+        time.sleep(0.5)
+        
         ids = [f"id{i}" for i in range(len(chunks))]
         collection.add(documents=chunks, ids=ids)
         logger.info(f"Vectordb reindexed with {len(chunks)} documents")
@@ -172,14 +189,30 @@ def reindex_vectordb(collection, chunks: List[str]) -> bool:
         st.error(f"🔍 Database reindexing failed: {e}")
         return False
 
+def sanitize_input(text: str, max_length: int = 1000) -> str:
+    """Sanitize user input for safety."""
+    if not isinstance(text, str):
+        return ""
+    
+    # Truncate if too long
+    if len(text) > max_length:
+        text = text[:max_length]
+    
+    # Remove any potential control characters
+    text = ''.join(char for char in text if ord(char) >= 32 or char in '\n\r\t')
+    
+    return text.strip()
+
 def query_vectordb(collection, query: str, n_results: int = DEFAULT_N_RESULTS) -> List[str]:
     """Query vector database with error handling and logging."""
     try:
-        if not query.strip():
-            logger.warning("Empty query provided")
+        # Sanitize input
+        query = sanitize_input(query)
+        if not query:
+            logger.warning("Empty or invalid query provided")
             return []
             
-        logger.info(f"Querying vectordb: '{query[:50]}...' (n_results={n_results})")
+        logger.info(f"Querying vectordb with {n_results} results requested")
         results = collection.query(
             query_texts=[query],
             include=["documents"],
@@ -189,10 +222,6 @@ def query_vectordb(collection, query: str, n_results: int = DEFAULT_N_RESULTS) -
         docs = results.get("documents", [[]])[0]
         logger.info(f"Found {len(docs)} relevant documents")
         
-        # Log first few characters of each result for debugging
-        for i, doc in enumerate(docs[:3]):
-            logger.debug(f"Result {i+1}: {doc[:100]}...")
-            
         return docs
         
     except Exception as e:
@@ -200,26 +229,39 @@ def query_vectordb(collection, query: str, n_results: int = DEFAULT_N_RESULTS) -
         st.error(f"🔍 Search failed: {e}")
         return []
 
+def truncate_context(prompt: str, context: str, max_total: int = 8000) -> str:
+    """Properly truncate context to fit within token limits."""
+    prompt_template_overhead = 200  # Rough estimate for template overhead
+    prompt_len = len(f"Prompt: {prompt}\nContext: ")
+    available_len = max_total - prompt_len - prompt_template_overhead
+    
+    if len(context) > available_len:
+        truncated = context[:available_len] + "...[truncated for length]"
+        logger.info(f"Context truncated from {len(context)} to {len(truncated)} characters")
+        return truncated
+    
+    return context
+
 def ask_llama(prompt: str, context: str) -> str:
     """Query Llama model with comprehensive error handling."""
     try:
-        if not prompt.strip():
+        # Sanitize inputs
+        prompt = sanitize_input(prompt, 500)
+        if not prompt:
             return "Please provide a valid question."
-            
-        logger.info(f"Asking AI: '{prompt[:50]}...'")
+        
+        # Truncate context properly
+        context = truncate_context(prompt, context)
+        
+        logger.info("Requesting AI response")
         full_prompt = f"Prompt: {prompt}\nContext: {context}"
         
-        # Validate context isn't too long
-        if len(full_prompt) > 10000:  # Rough token limit check
-            logger.warning("Context too long, truncating...")
-            context = context[:8000] + "...[truncated]"
-            full_prompt = f"Prompt: {prompt}\nContext: {context}"
-        
         result_ai = ""
+        event_count = 0
+        max_events = 1000
         
         # Stream response with timeout handling
         try:
-            event_count = 0
             for event in replicate.stream(
                 "meta/meta-llama-3-70b-instruct",
                 input={
@@ -238,8 +280,8 @@ def ask_llama(prompt: str, context: str) -> str:
                 event_count += 1
                 
                 # Prevent infinite loops
-                if event_count > 1000:
-                    logger.warning("Too many events from Replicate, breaking...")
+                if event_count > max_events:
+                    logger.warning(f"Reached maximum events ({max_events}), stopping stream")
                     break
                     
         except Exception as stream_error:
@@ -255,10 +297,10 @@ def ask_llama(prompt: str, context: str) -> str:
         
     except replicate.exceptions.ReplicateError as e:
         logger.error(f"Replicate API error: {e}")
-        return f"🤖 AI service temporarily unavailable: {str(e)}"
+        return f"🤖 AI service temporarily unavailable. Please try again later."
     except Exception as e:
         logger.error(f"Unexpected error in ask_llama: {e}")
-        return f"🤖 Sorry, I encountered an error: {str(e)}"
+        return f"🤖 Sorry, I encountered an error processing your request. Please try again."
 
 # --- INITIALIZE (WITH VALIDATION) ---
 def initialize_app():
@@ -266,7 +308,7 @@ def initialize_app():
     try:
         # Validate environment first
         if not validate_environment():
-            st.stop()
+            return None, None
             
         # Initialize components
         collection = get_chroma_collection()
@@ -274,7 +316,7 @@ def initialize_app():
         
         if not hansard_chunks:
             st.error("❌ Failed to load document. Please check the file.")
-            st.stop()
+            return None, None
             
         # Populate database
         populated = populate_vectordb_if_empty(collection, hansard_chunks)
@@ -286,76 +328,89 @@ def initialize_app():
     except Exception as e:
         logger.error(f"App initialization failed: {e}")
         st.error(f"❌ App initialization failed: {e}")
+        return None, None
+
+def main():
+    """Main application function."""
+    # Initialize the app
+    collection, hansard_chunks = initialize_app()
+    
+    if collection is None or hansard_chunks is None:
         st.stop()
 
-# Initialize the app
-collection, hansard_chunks = initialize_app()
+    # --- APP UI ---
+    st.title("📊 WAZZUP!!! Ask me anything about reforms")
 
-# --- APP UI ---
-st.title("📊 WAZZUP!!! Ask me anything about reforms")
-
-# Debug info in sidebar
-with st.sidebar:
-    st.subheader("🔧 Debug Info")
-    if collection:
+    # Debug info in sidebar
+    with st.sidebar:
+        st.subheader("🔧 Debug Info")
         try:
             doc_count = collection.count()
             st.metric("Documents in DB", doc_count)
-        except:
+        except Exception:
             st.metric("Documents in DB", "Error")
-    
-    st.metric("Chunk Size", CHUNK_SIZE)
-    st.metric("Max Tokens", MAX_TOKENS)
-    
-    # Re-index button
-    if st.button("🔄 Re-index Document"):
-        with st.spinner("Re-indexing..."):
-            success = reindex_vectordb(collection, hansard_chunks)
-        if success:
-            st.success("✅ Re-indexed successfully!")
+        
+        st.metric("Chunk Size", CHUNK_SIZE)
+        st.metric("Max Tokens", MAX_TOKENS)
+        st.metric("Results Retrieved", DEFAULT_N_RESULTS)
+        
+        # Re-index button
+        if st.button("🔄 Re-index Document"):
+            with st.spinner("Re-indexing..."):
+                success = reindex_vectordb(collection, hansard_chunks)
+            if success:
+                st.success("✅ Re-indexed successfully!")
+                st.rerun()  # Refresh the page
+            else:
+                st.error("❌ Re-indexing failed!")
+
+    # Main interface
+    prompt = st.text_area("What do you want to know?", height=100, max_chars=1000)
+
+    if st.button("Ask Arvee", type="primary"):
+        if not prompt.strip():
+            st.warning("You need to type a question! I can't read your mind...yet 🙃")
         else:
-            st.error("❌ Re-indexing failed!")
-
-# Main interface
-prompt = st.text_area("What do you want to know?", height=100)
-
-if st.button("Ask Arvee", type="primary"):
-    if not prompt.strip():
-        st.warning("You need to type a question! I can't read your mind...yet 🙃")
-    else:
-        with st.spinner("🔍 Retrieving info and asking the AI..."):
-            try:
-                # Query the database
-                docs = query_vectordb(collection, prompt, n_results=10)
-                
-                if docs:
-                    # Show retrieved context
-                    with st.expander("📖 Retrieved Context", expanded=False):
-                        for i, d in enumerate(docs[:3], 1):
-                            st.info(f"**Context {i}:** {d}")
+            with st.spinner("🔍 Retrieving info and asking the AI..."):
+                try:
+                    # Query the database
+                    docs = query_vectordb(collection, prompt, n_results=DEFAULT_N_RESULTS)
                     
-                    # Get AI response
-                    context_for_ai = '\n---\n'.join(docs[:3])
-                    result = ask_llama(prompt, context_for_ai)
-                    
-                    # Display result
-                    st.subheader("🤖 Arvee says:")
-                    st.write(result)
-                    
-                    # Debug info
-                    with st.expander("🔍 Debug Info"):
-                        st.write(f"**Query:** {prompt}")
-                        st.write(f"**Retrieved {len(docs)} documents**")
-                        st.write(f"**Response length:** {len(result)} characters")
+                    if docs:
+                        # Show retrieved context
+                        with st.expander("📖 Retrieved Context", expanded=False):
+                            for i, d in enumerate(docs[:3], 1):
+                                st.info(f"**Context {i}:** {d}")
                         
-                else:
-                    st.info("🤷 No relevant context found in the documents.")
-                    logger.warning(f"No results for query: {prompt}")
-                    
-            except Exception as e:
-                logger.error(f"Query processing failed: {e}")
-                st.error(f"❌ Something went wrong: {e}")
+                        # Get AI response
+                        context_for_ai = '\n---\n'.join(docs)
+                        result = ask_llama(prompt, context_for_ai)
+                        
+                        # Display result
+                        st.subheader("🤖 Arvee says:")
+                        st.write(result)
+                        
+                        # Debug info
+                        with st.expander("🔍 Debug Info"):
+                            st.write(f"**Retrieved {len(docs)} documents**")
+                            st.write(f"**Response length:** {len(result)} characters")
+                            st.write(f"**Context length:** {len(context_for_ai)} characters")
+                            
+                    else:
+                        st.info("🤷 No relevant context found in the documents.")
+                        logger.warning("No results found for user query")
+                        
+                except Exception as e:
+                    logger.error(f"Query processing failed: {e}")
+                    st.error(f"❌ Something went wrong: {e}")
 
-# Footer with status
-st.markdown("---")
-st.markdown("💡 **Tip:** Check the sidebar for debug information and re-indexing options.")
+    # Footer with status
+    st.markdown("---")
+    st.markdown("💡 **Tip:** Check the sidebar for debug information and re-indexing options.")
+
+# Run the app
+if __name__ == "__main__":
+    main()
+else:
+    # When imported as module, still run main for Streamlit
+    main()
