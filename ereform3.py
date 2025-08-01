@@ -439,7 +439,7 @@ def main():
                                 st.write(f"**Response length:** {len(result)} characters")
                                 st.write(f"**Context length:** {len(context_for_ai)} characters")
                                 
-                        except Exception as ai_error:
+                                except Exception as ai_error:
                             progress_container.empty()
                             logger.error(f"AI processing failed: {ai_error}")
                             st.error("🤖 AI processing failed. Please try again with a shorter question.")
