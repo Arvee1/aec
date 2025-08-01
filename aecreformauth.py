@@ -347,7 +347,7 @@ class RAGApp:
     
     def render_user_authentication(self):
         """Render user authentication interface."""
-        st.title("📊 Welcome to Document Q&A Assistant")
+        st.title("📊 Wazzup and Welcome to your EReform Assistant")
         st.markdown("Please enter your name to get started!")
         
         with st.form("user_auth_form"):
@@ -420,7 +420,7 @@ class RAGApp:
             return
             
         st.title("📊 Document Q&A Assistant")
-        st.markdown(f"Welcome back, **{st.session_state.username}**! Ask questions about reforms in simple language.")
+        st.markdown(f"Welcome back, **{st.session_state.username}**! Ask me any questions about reforms.")
         
         # Add helpful examples
         with st.expander("💡 Example Questions", expanded=False):
