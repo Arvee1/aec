@@ -424,7 +424,7 @@ class RAGApp:
             self.render_user_authentication()
             return
             
-        st.title("📊 Document Q&A Assistant")
+        st.title("📊 Wazzup!!! This is Arvee your Assistant")
         st.markdown(f"Welcome back, **{st.session_state.username}**! Ask me any questions about reforms.")
         
         # Add helpful examples
