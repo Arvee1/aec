@@ -28,7 +28,8 @@ import json
 from datetime import datetime
 import chromadb
 from chromadb.utils import embedding_functions
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+# from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 import replicate
 
 # Configure logging
