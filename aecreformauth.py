@@ -27,6 +27,7 @@ from typing import List, Optional, Tuple
 import json
 from datetime import datetime
 import chromadb
+from llm_settings import LLM_MODEL_ID, format_llm_model_label
 from user_validation import validate_name
 from chromadb.utils import embedding_functions
 # from langchain.text_splitter import RecursiveCharacterTextSplitter
@@ -52,6 +53,7 @@ class Config:
     COLLECTION_NAME = "ereform_docs"
     DOC_FILE = "24146b01_Electoral_Reform.txt"
     QUERY_LOG_FILE = "user_queries.json"
+    LLM_MODEL = LLM_MODEL_ID
     
     # Document processing
     CHUNK_SIZE = 800      # Larger chunks for more context per piece
@@ -285,7 +287,7 @@ INSTRUCTIONS:
         try:
             result = ""
             for event in replicate.stream(
-                "meta/meta-llama-3-70b-instruct",
+                self.config.LLM_MODEL,
                 input={
                     "top_k": 50,
                     "top_p": self.config.TOP_P,
@@ -400,6 +402,7 @@ class RAGApp:
             
             # Document management section
             st.header("📚 Document Management")
+            st.caption(format_llm_model_label(self.config.LLM_MODEL))
             
             st.info(f"**Document:** {self.config.DOC_FILE}")
             st.info(f"**Chunks:** {len(self.chunks)}")
