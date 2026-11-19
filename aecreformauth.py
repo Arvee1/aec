@@ -27,6 +27,7 @@ from typing import List, Optional, Tuple
 import json
 from datetime import datetime
 import chromadb
+from user_validation import validate_name
 from chromadb.utils import embedding_functions
 # from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -366,13 +367,15 @@ class RAGApp:
             submitted = st.form_submit_button("Continue", type="primary")
             
             if submitted:
-                if username.strip():
-                    st.session_state.username = username.strip()
-                    st.session_state.user_authenticated = True
-                    st.success(f"Welcome, {username}! 🎉")
-                    st.rerun()
+                try:
+                    valid_username = validate_name(username)
+                except ValueError as error:
+                    st.error(str(error))
                 else:
-                    st.error("Please enter your name to continue.")
+                    st.session_state.username = valid_username
+                    st.session_state.user_authenticated = True
+                    st.success(f"Welcome, {valid_username}! 🎉")
+                    st.rerun()
     
     def render_sidebar(self):
         """Render sidebar with admin controls and user info."""
